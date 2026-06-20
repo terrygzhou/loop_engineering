@@ -1,0 +1,47 @@
+# Guardrails for self-improving loop
+# Changes affecting these areas require human approval
+
+security_sensitive:
+  - auth
+  - authentication
+  - authorization
+  - payment
+  - billing
+  - password
+  - credential
+  - secret
+  - api_key
+  - token
+
+quality_thresholds:
+  uat_pass_rate: 0.95        # Minimum UAT pass rate to proceed to SHIP
+  test_flakiness_rate: 0.1   # Max acceptable test flakiness
+  max_review_revisions: 2    # Loop back to BUILD if more than this
+  max_security_findings: 0   # Critical security findings must be zero
+  max_latency_ms: 500        # P95 latency threshold
+
+feedback:
+  min_confidence: 0.9        # Minimum confidence to store pattern
+  max_cycles_for_rollback: 3 # If quality drops >15% over N cycles, rollback
+  quality_drop_threshold: 0.15  # 15% quality drop triggers rollback
+
+reflection:
+  dry_run_required: true     # Always dry-run config changes
+  human_approval_required: true  # Always require human approval for config changes
+  auto_apply_low_risk: true   # Auto-apply low-risk changes when confidence >= 0.95 AND security_findings == 0
+
+llm:
+  model: Qwen3.6-27B
+  base_url: http://localhost:8080/v1
+  temperature: 0.1          # Low temp for deterministic output
+  max_retries: 3
+
+# Code review auto-approval settings (from REFLECT cycle-eee15619)
+code_review:
+  auto_approve_minor_changes: true
+  revision_trigger_threshold: 0.95
+
+# Spec generation settings (from REFLECT cycle-eee15619)
+spec_generation:
+  temperature: 0.2
+  pre_validation_dry_run: true
