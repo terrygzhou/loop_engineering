@@ -19,5 +19,9 @@ build/
 .env
 *.key
 
+# Local test scripts (contain personal paths)
+test_dashboard.py
+test_imports.py
+
 # Storage
 storage/

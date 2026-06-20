@@ -32,7 +32,7 @@ reflection:
 
 llm:
   model: Qwen3.6-27B
-  base_url: http://localhost:8080/v1
+  base_url: ${LLM_BASE_URL:-http://localhost:8080/v1}
   temperature: 0.1          # Low temp for deterministic output
   max_retries: 3
 
