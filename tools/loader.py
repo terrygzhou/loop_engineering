@@ -6,7 +6,7 @@ import os
 import re
 import yaml
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 def parse_skill_md(filepath: str) -> Dict[str, Any]:
@@ -85,7 +85,44 @@ def find_skills_by_trigger(trigger_keyword: str, skills: List[Dict[str, Any]]) -
     return matches
 
 
-def build_skill_registry(skills_dir: str = "~/.hermes/skills") -> Dict[str, Dict[str, Any]]:
-    """Build a name→skill registry for fast lookup."""
+def build_skill_registry(skills_dir: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Build a name→skill registry for fast lookup.
+    
+    Search order:
+    1. skills_dir parameter (if provided)
+    2. SKILLS_DIR environment variable
+    3. Local ./skills directory (for self-contained operation)
+    4. ~/.hermes/skills (default Hermes location)
+    """
+    # Determine skills directory
+    if skills_dir is None:
+        skills_dir = os.getenv("SKILLS_DIR")
+    
+    if skills_dir is None:
+        # Check for local skills directory first
+        local_skills = Path(__file__).parent.parent / "skills"
+        if local_skills.exists():
+            skills_dir = str(local_skills)
+        else:
+            skills_dir = "~/.hermes/skills"
+    
+    # Also try to merge with ~/.hermes/skills if different
+    hermes_skills = Path("~/.hermes/skills").expanduser()
+    
+    registry = {}
+    
+    # Load from primary skills dir
     skills = load_skills(skills_dir)
-    return {skill["name"]: skill for skill in skills}
+    for skill in skills:
+        registry[skill["name"]] = skill
+    
+    # Merge with Hermes skills if different location
+    if Path(skills_dir).expanduser() != hermes_skills and hermes_skills.exists():
+        hermes_skills_list = load_skills(str(hermes_skills))
+        for skill in hermes_skills_list:
+            # Only add if not already present
+            if skill["name"] not in registry:
+                registry[skill["name"]] = skill
+    
+    return registry
