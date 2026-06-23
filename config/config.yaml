@@ -1,0 +1,11 @@
+paths:
+  project_name: loop_project
+  workspace_dir: ~/workspace/projects
+  project_path: '{{project_name}}'
+  skills_dir: skills
+  storage_dir: ./storage
+  guardrails_path: ./config/guardrails.yaml
+workflow:
+  hil_mode: auto
+  max_retries: 2
+  auto_approve: false
