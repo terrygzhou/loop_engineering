@@ -9,8 +9,8 @@ While the current BUILD pipeline targets Python/FastAPI projects, the workflow i
 
 ```
 ┌─────────────┐     ┌────────────┐     ┌───────────┐
-│    CLI      │────▶│ LangGraph  │────▶│  Skills    │
-│  (Typer)    │     │ Orchestrator│     │ (SKILL.md) │
+│    CLI      │────▶│ LangGraph  │────▶│  Skills   │
+│  (Typer)    │     │ Orchestrator│    │ (SKILL.md)│
 └─────────────┘     └─────┬──────┘     └───────────┘
                           │
                           ▼
@@ -34,16 +34,43 @@ SHIP (deploy) → REFLECT (self-improve) → END
 
 ## Skills Per Phase
 
-| Phase | Skills |
-|-------|--------|
-| DISCOVER | none (filesystem/git/docker scans — **skipped for greenfield**) |
-| DEFINE | interview-me → speckit-specify → api-and-interface-design |
-| PLAN | writing-plans → speckit-tasks → speckit-analyze → doubt-driven-development → speckit-checklist |
-| BUILD | incremental-implementation → fastapi-jinja2-feature-build → test-driven-development → security-and-hardening → requesting-code-review → **execute** (write files, Docker build, health check, pytest, bandit) |
-| SEED_DATA | ai-workflow-data-seeding |
-| VERIFY | uat-workflow (Playwright desktop + mobile mandatory) → performance-optimization → systematic-debugging → code-simplification |
-| SHIP | observability-and-instrumentation → shipping-and-launch → docker-compose-deployment → git-workflow |
-| REFLECT | meta-agent (internal) → diff_engine → human approval → git-workflow |
+Each LangGraph node chains its skills sequentially. A skill is skipped if missing from the local `skills/` directory — the pipeline does not fail, it continues with whatever artifacts were produced.
+
+| LangGraph Node | Skill Chain | Token Budget (est.) |
+|----------------|-------------|:---|
+| **DISCOVER** | none — filesystem/git/docker scans (Python only, no LLM calls) | 0 |
+| **DEFINE** | `interview-me` → `speckit-specify` → `api-and-interface-design` | 3 LLM calls |
+| **PLAN** | `writing-plans` → `speckit-tasks` → `speckit-analyze` → `doubt-driven-development` → `speckit-checklist` | 5 LLM calls |
+| **BUILD** | `incremental-implementation` → `fastapi-jinja2-feature-build` → `test-driven-development` → `security-and-hardening` → `requesting-code-review` → **execute** (write files, Docker build, health check, pytest, bandit) | 5 LLM calls + loops (×2 max) |
+| **SEED_DATA** | `ai-workflow-data-seeding` | 1 LLM call |
+| **VERIFY** | `uat-workflow` (Playwright desktop+mobile) → `performance-optimization` (if slow) → `systematic-debugging` (if flaky) → `code-simplification` (if complex) | 1–4 LLM calls |
+| **SHIP** | `observability-and-instrumentation` → `shipping-and-launch` → `docker-compose-deployment` → `git-workflow` | 4 LLM calls |
+| **REFLECT** | internal meta-agent (diff_engine) → `git-workflow` (human approval gate) | 1–2 LLM calls |
+
+**Total per full cycle**: ~20–35 LLM calls. BUILD loops (up to 2 retries) and conditional VERIFY sub-skills can push this higher.
+
+## Running
+
+### CLI (headless, terminal)
+
+```bash
+python main.py                              # interactive — prompts for name & spec
+python main.py --project myapp --spec "..." # auto-approve with inline spec
+python main.py --project myapp --context /path/to/existing  # scan existing codebase
+python main.py --project myapp --auto-approve  # skip all HIL gates (fully unattended)
+```
+
+### Web UI (browser, real-time)
+
+```bash
+cd frontend/backend && python app.py        # starts on http://localhost:8011
+```
+
+Open `http://localhost:8011`. Enter project name, spec, and optionally a context folder. Click **Start Workflow** — progress streams via WebSocket with quality gates dashboard, phase duration timers, deduplicated artifact log, and tabbed phase details.
+
+Both modes share the same `WorkflowRunner` / `LangGraph` pipeline — identical node execution, different user-facing interfaces.
+
+> ⚠️ **Token Usage Warning**: A full DISCOVER→SHIP cycle makes 20–35 LLM calls, each consuming a large context window. Extended BUILD loops or REFLECT iterations multiply this. Unattended runs (`--auto-approve`) with no human intervention can accumulate significant API costs or local GPU compute time. **Always monitor your provider's usage dashboard during long runs.** Consider setting `--auto-approve` only for trusted, well-scoped tasks.
 
 ## LLM Providers
 
