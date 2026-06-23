@@ -28,7 +28,6 @@ storage/
 
 # Local project artifacts (not part of loop_engineering repo)
 MyWords/
-docs/
 
 # Local-generated artifacts (not committed)
 frontend/backend/__pycache__/
