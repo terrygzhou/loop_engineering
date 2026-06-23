@@ -25,3 +25,16 @@ test_imports.py
 
 # Storage
 storage/
+
+# Local project artifacts (not part of loop_engineering repo)
+MyWords/
+config/config.yaml
+config/guardrails.py
+config/loader.py
+config/prompt_templates.py
+docs/
+frontend/Dockerfile
+frontend/docker-compose.yml
+frontend/nginx/
+frontend/requirements.txt
+graph/executor.py
