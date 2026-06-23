@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loop Engineering</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="logo">Loop Engineering</h1>
+        <span class="cycle-badge" id="cycle-badge">Cycle <span id="cycle-num">0</span></span>
+        <span class="project-badge" id="project-badge" style="display:none;">
+          <span class="project-label">Project:</span>
+          <span class="project-name" id="project-name"></span>
+        </span>
+      </div>
+      <div class="header-right">
+        <div class="status-badge" id="status-badge">
+          <span class="status-dot"></span>
+          <span class="status-text">IDLE</span>
+        </div>
+        <button id="btn-abort" class="btn btn-danger" style="display:none;">Abort</button>
+        <button id="btn-start" class="btn btn-primary">Start Workflow</button>
+      </div>
+    </header>
+
+    <!-- Requirements Input Dialog -->
+    <div class="modal-overlay" id="requirement-overlay" style="display:none;">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3>Project Requirements</h3>
+          <button class="modal-close" id="req-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label">Project Name</label>
+          <input type="text" id="req-project-name" class="form-input" placeholder="e.g. My API Service">
+          <label class="form-label">Initial Idea</label>
+          <textarea id="req-spec" class="form-textarea" placeholder="Briefly describe what you want built.&#10;&#10;The workflow will interview you for details as each phase needs them." rows="3"></textarea>
+          <p class="form-hint">Once started, the workflow will interview you through each phase using skill-driven questions (core behavior, data model, API surface, etc.).</p>
+          <label class="form-label" style="margin-top:12px;">Context Folder <span style="color:var(--text-muted);font-weight:normal;">(optional)</span></label>
+          <input type="text" id="req-context-folder" class="form-input" placeholder="e.g. /path/to/existing/codebase — leave empty for greenfield">
+          <p class="form-hint">Provide a path to an existing codebase or docs folder for the DISCOVER phase to analyse. Leave empty for new projects (DISCOVER will be skipped).</p>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-cancel-req" class="btn btn-secondary">Cancel</button>
+          <button id="btn-submit-req" class="btn btn-primary">Start Workflow</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Phase Pipeline -->
+      <section class="pipeline-section">
+        <h2 class="section-title">Workflow Pipeline</h2>
+        <div class="pipeline" id="pipeline">
+          <div class="pipeline-phase" data-phase="DISCOVER">
+            <div class="phase-icon">🔍</div>
+            <div class="phase-label">DISCOVER</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="DEFINE">
+            <div class="phase-icon">📝</div>
+            <div class="phase-label">DEFINE</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="PLAN">
+            <div class="phase-icon">📋</div>
+            <div class="phase-label">PLAN</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="BUILD">
+            <div class="phase-icon">🔨</div>
+            <div class="phase-label">BUILD</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="SEED_DATA">
+            <div class="phase-icon">🌱</div>
+            <div class="phase-label">SEED</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="VERIFY">
+            <div class="phase-icon">✅</div>
+            <div class="phase-label">VERIFY</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="SHIP">
+            <div class="phase-icon">🚀</div>
+            <div class="phase-label">SHIP</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="REFLECT">
+            <div class="phase-icon">🔄</div>
+            <div class="phase-label">REFLECT</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Metrics Summary -->
+      <section class="metrics-section" id="metrics-section">
+        <h2 class="section-title">Quality Gates</h2>
+        <div class="metrics-grid" id="metrics-grid">
+          <div class="metric-card" data-metric="spec_confidence">
+            <div class="metric-header">
+              <span class="metric-label">Spec Confidence</span>
+              <span class="metric-threshold">≥ 0.90</span>
+            </div>
+            <div class="metric-value">—</div>
+            <div class="metric-status">pending</div>
+          </div>
+          <div class="metric-card" data-metric="arch_uncertainty">
+            <div class="metric-header">
+              <span class="metric-label">Arch Uncertainty</span>
+              <span class="metric-threshold">≤ 0.80</span>
+            </div>
+            <div class="metric-value">—</div>
+            <div class="metric-status">pending</div>
+          </div>
+          <div class="metric-card" data-metric="security_findings">
+            <div class="metric-header">
+              <span class="metric-label">Security Findings</span>
+              <span class="metric-threshold">= 0</span>
+            </div>
+            <div class="metric-value">—</div>
+            <div class="metric-status">pending</div>
+          </div>
+          <div class="metric-card" data-metric="review_revisions">
+            <div class="metric-header">
+              <span class="metric-label">Review Revisions</span>
+              <span class="metric-threshold">≤ 2</span>
+            </div>
+            <div class="metric-value">—</div>
+            <div class="metric-status">pending</div>
+          </div>
+          <div class="metric-card" data-metric="uat_pass_rate">
+            <div class="metric-header">
+              <span class="metric-label">UAT Pass Rate</span>
+              <span class="metric-threshold">≥ 0.95</span>
+            </div>
+            <div class="metric-value">—</div>
+            <div class="metric-status">pending</div>
+          </div>
+          <div class="metric-card" data-metric="task_count">
+            <div class="metric-header">
+              <span class="metric-label">Task Count</span>
+              <span class="metric-threshold">—</span>
+            </div>
+            <div class="metric-value">—</div>
+            <div class="metric-status">pending</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Content Area -->
+      <div class="content-grid">
+        <!-- Progress Log -->
+        <section class="progress-section">
+          <h2 class="section-title">Progress Log</h2>
+          <div class="progress-log" id="progress-log"></div>
+        </section>
+
+        <!-- Phase Details / Input -->
+        <section class="detail-section" id="detail-section">
+          <h2 class="section-title" id="detail-title">Phase Details</h2>
+          <!-- Phase tabs for artifact navigation -->
+          <div class="phase-tabs" id="phase-tabs"></div>
+          <div class="detail-content" id="detail-content">
+            <p class="detail-placeholder">Workflow output will appear here as phases complete</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- Input Modal -->
+      <div class="modal-overlay" id="modal-overlay" style="display:none;">
+        <div class="modal">
+          <div class="modal-header">
+            <h3 id="modal-title">User Input Required</h3>
+            <button class="modal-close" id="modal-close">&times;</button>
+          </div>
+          <div class="modal-body" id="modal-body"></div>
+          <div class="modal-footer">
+            <button id="btn-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="btn-submit" class="btn btn-primary">Submit</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

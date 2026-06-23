@@ -1,0 +1,752 @@
+/**
+ * Loop Engineering UI — Client-side application
+ * Connects via WebSocket for real-time progress and REST API for state management.
+ */
+
+// ─── Configuration ────────────────────────────────────────────────
+const CONFIG = {
+  wsUrl: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/progress`,
+  apiBase: '/api',
+  pollingInterval: 5000,
+};
+
+// ─── State ──────────────────────────────────────────────────────
+const state = {
+  workflow: { status: 'idle', cycle: 0, phase: '', waitingFor: null, projectName: '' },
+  phases: {},
+  messages: [],
+  interviewActive: false,
+  interviewPhase: null,
+  reconnectAttempts: 0,
+  maxReconnectAttempts: 10,
+  metrics: {},
+  thresholds: {},
+  // Track which artifact keys we've already shown (dedup)
+  shownArtifacts: {},
+  // Track which log entries we've already rendered (by index)
+  lastRenderedMsgCount: 0,
+};
+
+// ─── DOM Elements ─────────────────────────────────────────────────
+const dom = {
+  cycleNum: document.getElementById('cycle-num'),
+  statusBadge: document.getElementById('status-badge'),
+  statusDot: document.querySelector('.status-dot'),
+  statusText: document.querySelector('.status-text'),
+  btnStart: document.getElementById('btn-start'),
+  btnAbort: document.getElementById('btn-abort'),
+  pipeline: document.getElementById('pipeline'),
+  progressLog: document.getElementById('progress-log'),
+  detailSection: document.getElementById('detail-section'),
+  detailTitle: document.getElementById('detail-title'),
+  detailContent: document.getElementById('detail-content'),
+  phaseTabs: document.getElementById('phase-tabs'),
+  modalOverlay: document.getElementById('modal-overlay'),
+  modalTitle: document.getElementById('modal-title'),
+  modalBody: document.getElementById('modal-body'),
+  modalClose: document.getElementById('modal-close'),
+  btnSubmit: document.getElementById('btn-submit'),
+  btnCancel: document.getElementById('btn-cancel'),
+  projectBadge: document.getElementById('project-badge'),
+  projectName: document.getElementById('project-name'),
+  metricsGrid: document.getElementById('metrics-grid'),
+};
+
+// ─── Initialization ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('[App] Initializing...');
+  connectWebSocket();
+  startPolling();
+  setupEventListeners();
+  fetchStatus();
+  fetchMetrics();
+});
+
+// ─── WebSocket Connection ─────────────────────────────────────────
+function connectWebSocket() {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    return;
+  }
+
+  try {
+    state.ws = new WebSocket(CONFIG.wsUrl);
+
+    state.ws.onopen = () => {
+      console.log('[WS] Connected');
+      state.reconnectAttempts = 0;
+    };
+
+    state.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleProgressEvent(data);
+      } catch (e) {
+        console.error('[WS] Parse error:', e);
+      }
+    };
+
+    state.ws.onclose = () => {
+      console.log('[WS] Disconnected');
+      attemptReconnect();
+    };
+
+    state.ws.onerror = (err) => {
+      console.error('[WS] Error:', err);
+    };
+  } catch (err) {
+    console.error('[WS] Connection failed:', err);
+    attemptReconnect();
+  }
+}
+
+function attemptReconnect() {
+  if (state.reconnectAttempts >= state.maxReconnectAttempts) {
+    console.error('[WS] Max reconnect attempts reached');
+    return;
+  }
+  state.reconnectAttempts++;
+  const delay = Math.min(1000 * state.reconnectAttempts, 10000);
+  console.log(`[WS] Reconnecting in ${delay}ms (attempt ${state.reconnectAttempts})`);
+  setTimeout(connectWebSocket, delay);
+}
+
+// ─── REST API ──────────────────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const res = await fetch(`${CONFIG.apiBase}/status`);
+    const data = await res.json();
+    updateState(data);
+    renderAll();
+  } catch (err) {
+    console.error('[API] Fetch status failed:', err);
+  }
+}
+
+async function fetchMetrics() {
+  try {
+    const res = await fetch(`${CONFIG.apiBase}/metrics`);
+    const data = await res.json();
+    state.metrics = data.current || {};
+    state.thresholds = data.thresholds || {};
+    renderMetrics();
+  } catch (err) {
+    console.error('[API] Fetch metrics failed:', err);
+  }
+}
+
+async function startWorkflow() {
+  try {
+    const res = await fetch(`${CONFIG.apiBase}/start`, { method: 'POST' });
+    const data = await res.json();
+    console.log('[API] Workflow started:', data);
+  } catch (err) {
+    console.error('[API] Start workflow failed:', err);
+  }
+}
+
+async function abortWorkflow() {
+  try {
+    const res = await fetch(`${CONFIG.apiBase}/abort`, { method: 'POST' });
+    const data = await res.json();
+    console.log('[API] Workflow aborted:', data);
+    state.workflow.status = 'idle';
+    state.interviewActive = false;
+    renderAll();
+  } catch (err) {
+    console.error('[API] Abort workflow failed:', err);
+  }
+}
+
+async function submitInput(phase, inputType, value) {
+  try {
+    const res = await fetch(`${CONFIG.apiBase}/input`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phase, input_type: inputType, value }),
+    });
+    const data = await res.json();
+    console.log('[API] Input submitted:', data);
+    closeModal();
+  } catch (err) {
+    console.error('[API] Submit input failed:', err);
+  }
+}
+
+// ─── State Management ─────────────────────────────────────────────
+function updateState(data) {
+  state.workflow = {
+    status: data.status,
+    cycle: data.cycle,
+    phase: data.phase,
+    waitingFor: data.waitingFor,
+    projectName: data.projectName || state.workflow.projectName || '',
+  };
+  if (data.phases) {
+    state.phases = data.phases.reduce((acc, phase) => {
+      acc[phase.phase] = phase;
+      return acc;
+    }, {});
+  }
+  if (data.messages) {
+    state.messages = data.messages;
+  }
+  // Also refresh metrics on each status poll
+  fetchMetrics();
+}
+
+function handleProgressEvent(event) {
+  state.messages.push(event);
+  if (event.phase in state.phases) {
+    updatePhaseState(event.phase, event.action, event.data, event);
+  }
+
+  // Clear interview state when workflow completes
+  if (event.phase === 'SYSTEM' && event.action === 'completed') {
+    state.interviewActive = false;
+    state.workflow.status = 'complete';
+    renderAll();
+    return;
+  }
+
+  // Handle skill-driven interview
+  if (event.action === 'interview' && event.data && event.data.questions) {
+    renderInterview(event.phase, event.data.questions);
+    return;
+  }
+
+  // Deduplicate: only render new progress entries
+  if (event.action === 'artifact') {
+    renderArtifactEvent(event);
+    return;
+  }
+
+  renderProgressEvent(event);
+}
+
+function updatePhaseState(phase, action, data, event) {
+  if (!state.phases[phase]) {
+    state.phases[phase] = { phase, status: 'pending', messages: [], artifacts: {} };
+  }
+  const ps = state.phases[phase];
+  switch (action) {
+    case 'started':
+      ps.status = 'running';
+      ps.startedAt = event?.timestamp;
+      break;
+    case 'progress':
+      ps.messages.push(event);
+      break;
+    case 'waiting':
+      ps.status = 'waiting';
+      break;
+    case 'completed':
+      ps.status = 'complete';
+      ps.completedAt = event?.timestamp;
+      break;
+    case 'error':
+      ps.status = 'error';
+      break;
+    case 'artifact':
+      if (data && data.artifact_name) {
+        ps.artifacts[data.artifact_name] = data.artifact_value;
+      }
+      break;
+  }
+}
+
+// ─── Rendering ────────────────────────────────────────────────────
+function renderAll() {
+  renderStatus();
+  renderPipeline();
+  renderProgressLog();
+  renderPhaseTabs();
+  renderDetail();
+  renderMetrics();
+}
+
+function renderStatus() {
+  const { status, cycle, projectName } = state.workflow;
+  dom.cycleNum.textContent = cycle;
+
+  // Project name badge
+  if (projectName) {
+    dom.projectBadge.style.display = 'inline-flex';
+    dom.projectName.textContent = projectName;
+  }
+
+  // Status badge
+  dom.statusBadge.className = `status-badge status-${status}`;
+  dom.statusDot.className = `status-dot ${status}`;
+  dom.statusText.textContent = status.toUpperCase();
+
+  // Start button
+  if (status === 'running' || status === 'waiting' || status === 'complete') {
+    dom.btnStart.disabled = true;
+    dom.btnStart.textContent = status === 'complete' ? 'Workflow Complete' : 'Running...';
+  } else {
+    dom.btnStart.disabled = false;
+    dom.btnStart.textContent = 'Start Workflow';
+  }
+
+  // Abort button
+  if (status === 'running' || status === 'waiting') {
+    dom.btnAbort.style.display = 'inline-flex';
+  } else {
+    dom.btnAbort.style.display = 'none';
+  }
+
+  // Show modal if waiting for input
+  if (state.workflow.waitingFor) {
+    showInputModal(state.workflow.waitingFor);
+  }
+}
+
+function renderPipeline() {
+  const phases = dom.pipeline.querySelectorAll('.pipeline-phase');
+  phases.forEach(el => {
+    const phaseName = el.dataset.phase;
+    const phase = state.phases[phaseName];
+    if (!phase) return;
+
+    // Update status indicator
+    const statusEl = el.querySelector('.phase-status');
+    statusEl.className = `phase-status ${phase.status}`;
+
+    // Update phase card state
+    el.className = 'pipeline-phase';
+    if (phase.status === 'running') el.classList.add('running');
+    if (phase.status === 'complete') el.classList.add('complete');
+    if (phase.status === 'error') el.classList.add('error');
+    if (phase.status === 'waiting') el.classList.add('waiting');
+    if (phase.status === 'active' || state.workflow.phase === phaseName) el.classList.add('active');
+
+    // Phase duration
+    const durationEl = el.querySelector('.phase-duration');
+    if (phase.startedAt) {
+      const start = new Date(phase.startedAt).getTime();
+      const end = phase.completedAt ? new Date(phase.completedAt).getTime() : Date.now();
+      const duration = formatDuration(end - start);
+      durationEl.textContent = duration;
+    } else {
+      durationEl.textContent = '';
+    }
+  });
+}
+
+function renderProgressLog() {
+  // Only append new entries — don't re-render the whole log
+  const newMessages = state.messages.slice(state.lastRenderedMsgCount);
+  if (newMessages.length === 0) return;
+
+  newMessages.forEach((msg) => {
+    // Deduplicate: skip artifact entries we've already shown
+    if (msg.action === 'artifact') {
+      const key = `${msg.phase}:${msg.data?.artifact_name}`;
+      if (state.shownArtifacts[key]) return;
+      state.shownArtifacts[key] = true;
+    }
+
+    const entry = document.createElement('div');
+    entry.className = 'log-entry new';
+    entry.innerHTML = `
+      <span class="log-phase ${msg.phase}">${msg.phase}</span>
+      <span class="log-message">
+        <span class="log-action ${msg.action}">${msg.action}</span>
+        ${escapeHtml(msg.message)}
+      </span>
+      <span class="log-time">${formatTime(msg.timestamp)}</span>
+    `;
+    dom.progressLog.appendChild(entry);
+  });
+
+  state.lastRenderedMsgCount = state.messages.length;
+
+  // Auto-scroll to bottom
+  dom.progressLog.parentElement.scrollTop = dom.progressLog.parentElement.scrollHeight;
+}
+
+function renderProgressEvent(event) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry new';
+  entry.innerHTML = `
+    <span class="log-phase ${event.phase}">${event.phase}</span>
+    <span class="log-message">
+      <span class="log-action ${event.action}">${event.action}</span>
+      ${escapeHtml(event.message)}
+    </span>
+    <span class="log-time">${formatTime(event.timestamp)}</span>
+  `;
+  dom.progressLog.appendChild(entry);
+
+  // Increment counter for next incremental render
+  state.lastRenderedMsgCount = state.messages.length;
+  dom.progressLog.parentElement.scrollTop = dom.progressLog.parentElement.scrollHeight;
+
+  // Also update phase state
+  if (event.phase in state.phases) {
+    updatePhaseState(event.phase, event.action, event.data, event);
+    renderPipeline();
+  }
+}
+
+function renderArtifactEvent(event) {
+  const key = `${event.phase}:${event.data?.artifact_name}`;
+  if (state.shownArtifacts[key]) return;
+  state.shownArtifacts[key] = true;
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry new';
+  entry.innerHTML = `
+    <span class="log-phase ${event.phase}">${event.phase}</span>
+    <span class="log-message">
+      <span class="log-action ${event.action}">${event.action}</span>
+      ${escapeHtml(event.message)}
+    </span>
+    <span class="log-time">${formatTime(event.timestamp)}</span>
+  `;
+  dom.progressLog.appendChild(entry);
+  state.lastRenderedMsgCount = state.messages.length;
+  dom.progressLog.parentElement.scrollTop = dom.progressLog.parentElement.scrollHeight;
+}
+
+function renderPhaseTabs() {
+  if (state.interviewActive) return;
+
+  // Show tabs for phases that have artifacts
+  const phasesWithArtifacts = Object.values(state.phases)
+    .filter(p => p.status === 'complete' && p.artifacts && Object.keys(p.artifacts).length > 0);
+
+  if (phasesWithArtifacts.length <= 1) {
+    dom.phaseTabs.innerHTML = '';
+    return;
+  }
+
+  const currentPhase = state.workflow.phase || phasesWithArtifacts[phasesWithArtifacts.length - 1]?.phase;
+
+  dom.phaseTabs.innerHTML = phasesWithArtifacts.map(p => `
+    <button class="phase-tab ${p.phase === currentPhase ? 'active' : ''}"
+            data-phase="${p.phase}"
+            onclick="selectPhaseTab('${p.phase}')">
+      ${p.phase} <span class="tab-count">(${Object.keys(p.artifacts).length})</span>
+    </button>
+  `).join('');
+}
+
+// Called from onclick in phase tabs
+window.selectPhaseTab = function(phaseName) {
+  dom.phaseTabs.querySelectorAll('.phase-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.phase === phaseName);
+  });
+  renderDetailForPhase(phaseName);
+};
+
+function renderDetail() {
+  // If there's an active interview, don't overwrite it
+  if (state.interviewActive) return;
+
+  if (state.workflow.waitingFor) {
+    const phase = state.phases[state.workflow.waitingFor];
+    if (phase) {
+      dom.detailTitle.textContent = `${phase.phase} — Review Required`;
+      dom.detailContent.innerHTML = `
+        <p>Phase: ${phase.phase}</p>
+        <p>Status: Waiting for your review and approval</p>
+        ${phase.messages ? `<p>Messages: ${phase.messages.length}</p>` : ''}
+        <p class="detail-placeholder">Submit your input to proceed...</p>
+      `;
+    }
+    return;
+  }
+
+  // Check if a tab is active
+  const activeTab = dom.phaseTabs.querySelector('.phase-tab.active');
+  if (activeTab) {
+    renderDetailForPhase(activeTab.dataset.phase);
+    return;
+  }
+
+  // Default: show latest completed phase artifacts
+  const completedPhases = Object.values(state.phases).filter(p => p.status === 'complete' && p.artifacts && Object.keys(p.artifacts).length > 0);
+  if (completedPhases.length > 0) {
+    const latest = completedPhases[completedPhases.length - 1];
+    renderDetailForPhase(latest.phase);
+  } else {
+    dom.detailTitle.textContent = 'Phase Details';
+    dom.detailContent.innerHTML = '<p class="detail-placeholder">Workflow output will appear here as phases complete</p>';
+  }
+}
+
+function renderDetailForPhase(phaseName) {
+  const phase = state.phases[phaseName];
+  if (!phase) return;
+
+  dom.detailTitle.textContent = `${phase.phase} — Output`;
+  const duration = phase.startedAt && phase.completedAt
+    ? formatDuration(new Date(phase.completedAt).getTime() - new Date(phase.startedAt).getTime())
+    : (phase.startedAt ? formatDuration(Date.now() - new Date(phase.startedAt).getTime()) + ' (running)' : '—');
+
+  let html = `<div class="detail-meta"><span>Duration: ${duration}</span><span>Artifacts: ${Object.keys(phase.artifacts || {}).length}</span></div>`;
+
+  for (const [name, value] of Object.entries(phase.artifacts || {})) {
+    const display = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+    // Truncate long artifacts in the log view
+    const truncated = display.length > 500 ? display.slice(0, 500) + '\n\n... (truncated, ' + display.length + ' chars total)' : display;
+    html += `<div class="detail-artifact">
+      <span class="detail-artifact-name">${name}</span>
+      <pre class="detail-artifact-value">${escapeHtml(truncated)}</pre>
+    </div>`;
+  }
+
+  if (phase.messages && phase.messages.length > 0) {
+    html += `<div class="detail-log"><strong>Activity Log</strong>`;
+    phase.messages.slice(-5).forEach(m => {
+      html += `<div class="detail-log-entry"><span class="log-action ${m.action}">${m.action}</span> ${escapeHtml(m.message)}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  dom.detailContent.innerHTML = html;
+}
+
+// ─── Metrics Rendering ───────────────────────────────────────────
+function renderMetrics() {
+  const metricCards = dom.metricsGrid.querySelectorAll('.metric-card');
+  const metrics = state.metrics || {};
+  const thresholds = state.thresholds || {};
+
+  metricCards.forEach(card => {
+    const metricName = card.dataset.metric;
+    const valueEl = card.querySelector('.metric-value');
+    const statusEl = card.querySelector('.metric-status');
+
+    if (!metrics[metricName]) {
+      valueEl.textContent = '—';
+      statusEl.textContent = 'pending';
+      statusEl.className = 'metric-status';
+      card.classList.remove('pass', 'fail', 'warn');
+      return;
+    }
+
+    const value = metrics[metricName];
+    valueEl.textContent = typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(2)) : value;
+
+    // Determine pass/fail based on thresholds
+    let status = 'pass';
+    let statusText = 'pass';
+
+    if (metricName === 'spec_confidence' && value < (thresholds.min_spec_confidence || 0.9)) {
+      status = 'fail'; statusText = 'below threshold';
+    } else if (metricName === 'arch_uncertainty' && value > (thresholds.max_arch_uncertainty || 0.8)) {
+      status = 'fail'; statusText = 'above threshold';
+    } else if (metricName === 'security_findings' && value > (thresholds.max_security_findings || 0)) {
+      status = 'fail'; statusText = 'findings detected';
+    } else if (metricName === 'review_revisions' && value > (thresholds.max_review_revisions || 2)) {
+      status = 'warn'; statusText = 'exceeds threshold';
+    } else if (metricName === 'uat_pass_rate' && value < (thresholds.uat_pass_rate || 0.95)) {
+      status = 'fail'; statusText = 'below threshold';
+    } else if (metricName === 'task_count') {
+      status = 'info'; statusText = 'info';
+    }
+
+    statusEl.textContent = statusText;
+    statusEl.className = `metric-status ${status}`;
+    card.classList.remove('pass', 'fail', 'warn', 'info');
+    card.classList.add(status);
+  });
+}
+
+// ─── Modal ──────────────────────────────────────────────────────
+function showInputModal(phase) {
+  dom.modalTitle.textContent = `${phase} — User Input Required`;
+  dom.modalBody.innerHTML = `
+    <label for="user-input-text">Provide your input for the ${phase} phase:</label>
+    <textarea id="user-input-text" placeholder="Enter your instructions, feedback, or approval..."></textarea>
+  `;
+  dom.modalOverlay.style.display = 'flex';
+
+  // Setup submit button
+  dom.btnSubmit.onclick = () => {
+    const value = document.getElementById('user-input-text').value;
+    if (value.trim()) {
+      submitInput(phase, 'text', value);
+    }
+  };
+
+  // Enter to submit
+  document.getElementById('user-input-text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      dom.btnSubmit.click();
+    }
+  });
+
+  // Focus textarea
+  setTimeout(() => document.getElementById('user-input-text')?.focus(), 100);
+}
+
+function closeModal() {
+  dom.modalOverlay.style.display = 'none';
+}
+
+// ─── Skill-driven Interview ─────────────────────────────────────
+function renderInterview(phase, questions) {
+  state.interviewActive = true;
+  state.interviewPhase = phase;
+
+  dom.detailTitle.textContent = `${phase} — Skill-Driven Interview`;
+  dom.detailContent.innerHTML = `
+    <div class="interview-intro">
+      The <strong>interview-me</strong> skill is asking for your requirements.
+      Answer each question below — your responses will feed directly into the spec.
+    </div>
+    <div class="interview-in-detail" id="interview-questions">
+      ${questions.map((q, i) => `
+        <div class="interview-question" style="--phase-color: var(--color-define);">
+          <div class="q-category">${q.label}</div>
+          <div class="q-text">${q.question}${q.required ? '<span class="q-required"> (required)</span>' : ''}</div>
+          <textarea class="form-textarea interview-answer" data-index="${i}"
+                    data-category="${q.category}" rows="2"
+                    placeholder="${q.placeholder}"></textarea>
+        </div>
+      `).join('')}
+    </div>
+    <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+      <button class="btn btn-secondary" id="interview-cancel">Skip Interview</button>
+      <button class="btn btn-primary" id="interview-submit">Submit Answers</button>
+    </div>
+  `;
+
+  const finishInterview = () => {
+    state.interviewActive = false;
+    state.interviewPhase = null;
+  };
+
+  document.getElementById('interview-submit').addEventListener('click', () => {
+    const answers = {};
+    document.querySelectorAll('.interview-answer').forEach(ta => {
+      const cat = ta.dataset.category;
+      const val = ta.value.trim();
+      if (val) answers[cat] = val;
+    });
+
+    // Validate required fields
+    const requiredMissing = questions.filter(q => q.required && !answers[q.category]);
+    if (requiredMissing.length > 0) {
+      alert(`Please fill in required questions: ${requiredMissing.map(q => q.label).join(', ')}`);
+      return;
+    }
+
+    // Format as structured text for the workflow
+    const formatted = Object.entries(answers).map(([cat, val]) => {
+      const q = questions.find(q => q.category === cat);
+      return `[${(q || {}).label || cat}] ${val}`;
+    }).join('\n\n');
+
+    submitInput(phase, 'interview_answers', formatted);
+    finishInterview();
+    dom.detailTitle.textContent = `${phase} — Answers Submitted`;
+    dom.detailContent.innerHTML = '<p class="detail-placeholder">Your answers have been submitted. The workflow will continue...</p>';
+  });
+
+  document.getElementById('interview-cancel').addEventListener('click', () => {
+    submitInput(phase, 'skip_interview', 'User skipped interview');
+    finishInterview();
+    dom.detailTitle.textContent = `${phase} — Interview Skipped`;
+    dom.detailContent.innerHTML = '<p class="detail-placeholder">Interview skipped. The workflow will continue with available context.</p>';
+  });
+}
+
+// ─── Event Listeners ─────────────────────────────────────────────
+function setupEventListeners() {
+  // Start workflow → show requirement modal
+  dom.btnStart.addEventListener('click', () => {
+    document.getElementById('requirement-overlay').style.display = 'flex';
+    document.getElementById('req-project-name').focus();
+  });
+
+  // Abort workflow
+  dom.btnAbort.addEventListener('click', () => {
+    if (confirm('Abort the running workflow? This will reset all state.')) {
+      abortWorkflow();
+    }
+  });
+
+  // Requirement modal controls
+  document.getElementById('req-close').addEventListener('click', () => {
+    document.getElementById('requirement-overlay').style.display = 'none';
+  });
+  document.getElementById('btn-cancel-req').addEventListener('click', () => {
+    document.getElementById('requirement-overlay').style.display = 'none';
+  });
+  document.getElementById('btn-submit-req').addEventListener('click', async () => {
+    const projectName = document.getElementById('req-project-name').value.trim();
+    const spec = document.getElementById('req-spec').value.trim();
+    const contextFolder = document.getElementById('req-context-folder').value.trim();
+    if (!projectName) {
+      alert('Please enter a project name');
+      document.getElementById('req-project-name').focus();
+      return;
+    }
+    state.workflow.projectName = projectName;
+    document.getElementById('requirement-overlay').style.display = 'none';
+    try {
+      const res = await fetch(`${CONFIG.apiBase}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_name: projectName, spec: spec, context_folder: contextFolder }),
+      });
+      const data = await res.json();
+      console.log('[API] Workflow started:', data);
+    } catch (err) {
+      console.error('[API] Start workflow failed:', err);
+    }
+  });
+
+  // Modal controls
+  dom.modalClose.addEventListener('click', closeModal);
+  dom.btnCancel.addEventListener('click', closeModal);
+
+  // Phase click for details
+  dom.pipeline.addEventListener('click', (e) => {
+    const phaseEl = e.target.closest('.pipeline-phase');
+    if (!phaseEl) return;
+
+    const phaseName = phaseEl.dataset.phase;
+    const phase = state.phases[phaseName];
+    if (!phase) return;
+
+    renderDetailForPhase(phaseName);
+    // Also activate the corresponding tab if it exists
+    dom.phaseTabs.querySelectorAll('.phase-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.phase === phaseName);
+    });
+  });
+}
+
+// ─── Polling ─────────────────────────────────────────────────────
+function startPolling() {
+  setInterval(fetchStatus, CONFIG.pollingInterval);
+}
+
+// ─── Utilities ──────────────────────────────────────────────────
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-AU', { hour12: false });
+}
+
+function formatDuration(ms) {
+  if (ms < 0) ms = 0;
+  const seconds = Math.floor(ms / 1000);
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins > 0) {
+    return `${mins}m${secs.toString().padStart(2, '0')}s`;
+  }
+  return `${secs}s`;
+}
