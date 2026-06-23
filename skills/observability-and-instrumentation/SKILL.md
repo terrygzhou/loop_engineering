@@ -1,6 +1,4 @@
-# observability-and-instrumentation
-
-```yaml
+---
 name: observability-and-instrumentation
 description: >
   Add structured logging, RED metrics, error tracking, and health
@@ -24,7 +22,9 @@ tools:
   - write_file
   - search_files
   - patch
-```
+---
+
+# observability-and-instrumentation
 
 ## Purpose
 

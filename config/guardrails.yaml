@@ -14,11 +14,20 @@ security_sensitive:
   - token
 
 quality_thresholds:
-  uat_pass_rate: 0.95        # Minimum UAT pass rate to proceed to SHIP
-  test_flakiness_rate: 0.1   # Max acceptable test flakiness
-  max_review_revisions: 2    # Loop back to BUILD if more than this
+  # DEFINE gates
+  min_spec_confidence: 0.9   # Below this, loop DEFINE to refine spec
+
+  # PLAN gates
+  max_arch_uncertainty: 0.8  # Above this, loop PLAN to resolve doubts
+
+  # BUILD gates
   max_security_findings: 0   # Critical security findings must be zero
-  max_latency_ms: 500        # P95 latency threshold
+  max_review_revisions: 2    # Loop back to BUILD if more than this
+
+  # VERIFY gates
+  uat_pass_rate: 0.95        # Minimum UAT pass rate to proceed to SHIP
+  max_latency_ms: 500        # P95 latency threshold — triggers perf optimization
+  max_test_flakiness_rate: 0.1   # Max acceptable test flakiness — triggers debugging
 
 feedback:
   min_confidence: 0.9        # Minimum confidence to store pattern

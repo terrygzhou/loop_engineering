@@ -10,6 +10,7 @@ import re
 import json
 from tools.loader import build_skill_registry
 from tools.llm import invoke_skill
+from config.guardrails import get_threshold
 
 
 def verify_node(state: dict) -> dict:
@@ -27,6 +28,11 @@ def verify_node(state: dict) -> dict:
         skills = build_skill_registry(os.getenv("SKILLS_DIR", "~/.hermes/skills"))
         state.setdefault("artifacts", {})["skill_registry"] = skills
     feedback = []
+
+    # Load thresholds from guardrails.yaml — REFLECT can update these between cycles
+    max_latency = get_threshold("max_latency_ms")
+    max_flakiness = get_threshold("max_test_flakiness_rate")
+    max_revisions = get_threshold("max_review_revisions")
 
     project_path = state.get("project_path", "")
     metrics = state["metrics"]
@@ -138,7 +144,7 @@ def verify_node(state: dict) -> dict:
             f"=== {page_coverage_text}\n"
             f"=== {edge_case_text}\n"
             "=== Performance Gates ===\n"
-            "1. API response < 500ms for list endpoints\n"
+            f"1. API response < {max_latency}ms for list endpoints\n"
             "2. Page load < 2 seconds\n"
             "3. Form submission < 3 seconds\n\n"
             "=== Report Format ===\n"
@@ -167,11 +173,11 @@ def verify_node(state: dict) -> dict:
         flakiness = 0.0
         feedback.append({"skill": "uat-workflow", "output": "SKIPPED - skill not found"})
 
-    # Step 2: Performance optimization (if latency is high)
-    if latency_ms > 500:
+    # Step 2: Performance optimization (if latency exceeds threshold)
+    if latency_ms > max_latency:
         perf_skill = skills.get("performance-optimization", {})
         if perf_skill:
-            print("  -> Running performance-optimization (latency > 500ms)...")
+            print(f"  -> Running performance-optimization (latency {latency_ms}ms > {max_latency}ms)...")
             task = "Profile and optimize performance bottlenecks"
             result = invoke_skill(perf_skill["content"], task,
                                  state.get("artifacts", {}).get("code_generated", ""),
@@ -179,11 +185,11 @@ def verify_node(state: dict) -> dict:
             state["artifacts"]["perf_report"] = result
             feedback.append({"skill": "performance-optimization", "output": result[:300]})
 
-    # Step 3: Systematic debugging (if test flakiness is high)
-    if flakiness > 0.1:
+    # Step 3: Systematic debugging (if test flakiness exceeds threshold)
+    if flakiness > max_flakiness:
         debug_skill = skills.get("systematic-debugging", {})
         if debug_skill:
-            print("  -> Running systematic-debugging (flakiness > 0.1)...")
+            print(f"  -> Running systematic-debugging (flakiness {flakiness} > {max_flakiness})...")
             task = "Debug test failures using 4-phase approach (Understand -> Isolate -> Root Cause -> Fix)"
             result = invoke_skill(debug_skill["content"], task,
                                  state.get("artifacts", {}).get("uat_results", ""),
@@ -191,8 +197,8 @@ def verify_node(state: dict) -> dict:
             state["artifacts"]["debug_report"] = result
             feedback.append({"skill": "systematic-debugging", "output": result[:300]})
 
-    # Step 4: Code simplification (if review revisions were high)
-    if metrics.review_revisions > 2:
+    # Step 4: Code simplification (if review revisions exceed threshold)
+    if metrics.review_revisions > max_revisions:
         simplify_skill = skills.get("code-simplification", {})
         if simplify_skill:
             print("  -> Running code-simplification (revisions > 2)...")

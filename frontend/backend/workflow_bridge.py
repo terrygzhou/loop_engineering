@@ -147,10 +147,20 @@ class WorkflowBridge:
         if self._use_real_workflow:
             return
 
-        # Add project root to path so graph/tools modules resolve
-        project_root = Path(__file__).resolve().parent.parent.parent
-        if str(project_root) not in sys.path:
+        # Resolve project root — try multiple locations for local vs Docker
+        candidates = [
+            Path(__file__).resolve().parent.parent.parent,  # local: ../.. from backend/
+            Path("/loop_engineering"),                        # Docker volume mount
+        ]
+        project_root = None
+        for candidate in candidates:
+            if (candidate / "graph" / "main.py").exists():
+                project_root = candidate
+                break
+
+        if project_root and str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
+            print(f"[Bridge] → Added {project_root} to sys.path")
 
         try:
             from graph.main import build_graph

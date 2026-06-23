@@ -5,6 +5,29 @@ Skills: writing-plans → speckit-tasks → speckit-analyze → doubt-driven-dev
 import os
 from tools.loader import build_skill_registry
 from tools.llm import invoke_skill
+from feedback.chroma_client import get_chroma_client, query_patterns
+
+
+def _load_feedback_context(state: dict) -> str:
+    """Query ChromaDB for historical patterns relevant to this project type."""
+    try:
+        client = get_chroma_client()
+        if client is None:
+            return ""
+        project_name = state.get("project_name", "unknown")
+        query_text = f"project: {project_name} phase: plan"
+        results = query_patterns(client, {"project": project_name, "context": query_text}, top_k=3)
+        if not results:
+            return ""
+        parts = ["== Historical Planning Lessons =="]
+        for i, pat in enumerate(results, 1):
+            doc = pat.get("document", "")
+            parts.append(f"\n[Past Cycle {i}] (distance: {pat.get('distance', '?'):.3f})\n{doc[:400]}")
+        parts.append("\n== End Historical Lessons ==")
+        return "\n".join(parts)
+    except Exception as e:
+        print(f"  ⚠ Could not load historical feedback: {e}")
+        return ""
 
 
 def _estimate_arch_uncertainty(artifacts: dict) -> float:
@@ -70,13 +93,20 @@ def plan_node(state: dict) -> dict:
         state.setdefault("artifacts", {})["skill_registry"] = skills
     feedback = []
 
+    # Load historical feedback context from ChromaDB
+    feedback_context = _load_feedback_context(state)
+    state["feedback_context"] = feedback_context
+
     # Step 1: Generate plan
     plan_skill = skills.get("writing-plans", {})
     if plan_skill:
         print("  → Running writing-plans...")
         spec = state.get("artifacts", {}).get("spec_refined", "")
+        context = spec
+        if feedback_context:
+            context += f"\n\n{feedback_context}\n"
         task = f"Create implementation plan for: {state.get('spec_path', '')}"
-        result = invoke_skill(plan_skill["content"], task, spec, llm=None)
+        result = invoke_skill(plan_skill["content"], task, context, llm=None)
         state["artifacts"]["plan"] = result
         feedback.append({"skill": "writing-plans", "output": result[:300]})
 

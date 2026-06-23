@@ -26,9 +26,13 @@ class WorkflowState(TypedDict):
     artifacts: dict[str, str]              # spec.yaml, tasks.md, code diffs, logs, etc.
     metrics: CycleMetrics                  # Collected metrics
     feedback: List[dict]                   # LLM review comments, debug traces, etc.
+    feedback_context: str                  # Historical patterns from past cycles (populated by ChromaDB)
     config_version: str                    # Git commit hash of skill configs
     human_approval_required: bool          # True if next action needs human approval
     next_phase: Optional[str]              # Suggested next phase (edges can override)
+    project_name: str                      # User-provided project name (captured in DEFINE)
     project_path: str                      # Path to the target project
     spec_path: str                         # Path to the spec directory
+    skip_discover: bool                    # True if no context folder (greenfield mode)
+    context_folder: str                    # Path to existing codebase for discovery
     error: Optional[str]                   # Error message if phase failed

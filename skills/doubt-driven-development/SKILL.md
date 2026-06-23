@@ -1,6 +1,4 @@
-# doubt-driven-development
-
-```yaml
+---
 name: doubt-driven-development
 description: >
   Structured critical review of architectural decisions through the
@@ -25,7 +23,9 @@ tools:
   - write_file
   - search_files
   - patch
-```
+---
+
+# doubt-driven-development
 
 ## Purpose
 

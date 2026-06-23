@@ -119,6 +119,12 @@ def apply_yaml_diff(config_path: str, diffs: dict) -> bool:
     threshold updates, key additions/removals, and value modifications.
     Returns True on success.
     """
+    # Handle prompt template updates (Python file)
+    for change in diffs.get("changes", []):
+        skill_name = change.get("skill", "")
+        if skill_name in ("interview_me", "speckit_specify", "api_and_interface_design"):
+            return apply_prompt_diff(skill_name, diffs)
+
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f) or {}
@@ -193,6 +199,52 @@ def apply_yaml_diff(config_path: str, diffs: dict) -> bool:
         return True
     except Exception as e:
         print(f"  ✗ Failed to apply config diff: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def apply_prompt_diff(template_name: str, diffs: dict) -> bool:
+    """
+    Apply prompt template diffs from REFLECT analysis.
+    Reads config/prompt_templates.py, finds the target template,
+    and applies the LLM-suggested changes.
+    Returns True on success.
+    """
+    import importlib
+    import inspect
+    import os
+
+    try:
+        template_file = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                     "config", "prompt_templates.py")
+        with open(template_file, "r") as f:
+            content = f.read()
+
+        # Find the target template in the file
+        pattern = rf'({template_name}\s*=\s*"""[^\"]*""")'
+        match = re.search(pattern, content, re.DOTALL)
+        if not match:
+            print(f"  ✗ Template '{template_name}' not found in {template_file}")
+            return False
+
+        current_template = match.group(1)
+        for change in diffs.get("changes", []):
+            if change.get("skill") == template_name:
+                change_desc = change.get("change", "")
+                rationale = change.get("rationale", "")
+                # Replace the template content with the LLM's improved version
+                # The change description should contain the revised prompt text
+                new_template = f'{template_name} = """{change_desc}"""'
+                content = content.replace(current_template, new_template)
+                print(f"     → {template_name}: updated ({rationale})")
+
+        with open(template_file, "w") as f:
+            f.write(content)
+        print(f"  ✓ Prompt diff applied to {template_file}")
+        return True
+    except Exception as e:
+        print(f"  ✗ Failed to apply prompt diff: {e}")
         import traceback
         traceback.print_exc()
         return False

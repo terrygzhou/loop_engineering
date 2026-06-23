@@ -1,70 +1,68 @@
 """
-Loop Engineering main entry point.
-Builds and runs the state graph for autonomous feature development cycles.
+Loop Engineering CLI entry point.
+
+Delegates to the shared executor so CLI and Web UI run identical workflow logic.
+Usage:
+    python main.py                      # interactive mode (asks for project name + spec)
+    python main.py --project NAME       # auto-approve with given project name
+    python main.py --project NAME --spec "text"  # with inline spec
+    python main.py --project NAME --context /path  # scan existing codebase
 """
-import asyncio
-import os
+import argparse
 import sys
-from tools.loader import build_skill_registry
-from graph.state import WorkflowState, CycleMetrics
-from graph.main import build_graph
+
+from graph.executor import WorkflowRunner
 
 
-async def run_workflow():
-    """
-    Run one complete loop engineering cycle.
-    Pre-builds skill registry and injects into state to avoid per-node disk scans.
-    """
-    # Pre-build skill registry (once, at graph build time)
-    skills_dir = os.getenv("SKILLS_DIR", "~/.hermes/skills")
-    print(f"→ Pre-building skill registry from {skills_dir}...")
-    skill_registry = build_skill_registry(skills_dir)
-    print(f"✓ Loaded {len(skill_registry)} skills: {', '.join(skill_registry.keys())}")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Loop Engineering CLI")
+    parser.add_argument("--project", type=str, default="", help="Project name")
+    parser.add_argument("--spec", type=str, default="", help="Initial spec/idea text")
+    parser.add_argument("--context", type=str, default="", help="Path to existing codebase for discovery")
+    parser.add_argument("--auto-approve", action="store_true", help="Skip all HIL gates")
+    return parser.parse_args()
 
-    # Build graph
-    graph = build_graph()
 
-    # Initialize state with pre-built skill registry
-    state = WorkflowState(
-        cycle_id="1",
-        phase="DISCOVER",
-        next_phase="DEFINE",
-        metrics=CycleMetrics(
-            spec_confidence=0.0,
-            arch_uncertainty=0.0,
-            task_count=0,
-            review_revisions=0,
-            security_findings=0,
-            uat_pass_rate=0.0,
-            latency_ms=0.0,
-            test_flakiness_rate=0.0,
-            launch_success=False,
-        ),
-        config_version="1",
-        artifacts={
-            "skill_registry": skill_registry,
-            "loop_counts": {},  # State-based loop counters (replaces global _loop_counter)
-        },
-        feedback=[],
-        error=None,
-        spec_path="",
-        project_path=os.getenv("PROJECT_PATH", ""),
+def main():
+    print("=== Loop Engineering — CLI ===")
+    args = parse_args()
+
+    if not args.project:
+        name = input("Project name: ").strip()
+    else:
+        name = args.project
+
+    if not name:
+        print("✗ Project name is required. Use --project NAME or answer the prompt.")
+        sys.exit(1)
+
+    spec = args.spec
+    if not spec:
+        spec = input("Brief description (or Enter to skip): ").strip()
+
+    context = args.context
+    if not context and not args.auto_approve:
+        context = input("Existing codebase path for discovery (or Enter for greenfield): ").strip()
+
+    runner = WorkflowRunner()
+    result = runner.run_interactive(
+        project_name=name,
+        spec_text=spec,
+        context_folder=context,
+        auto_approve=args.auto_approve,
     )
 
-    # Run the graph
-    result = await graph.ainvoke(state)
-    return result
+    print(f"\n=== Cycle {result.get('cycle_id', '?')} complete ===")
+    print(f"Phase: {result.get('phase')}")
+    print(f"Project: {result.get('artifacts', {}).get('project_name', 'unknown')}")
+    if result.get("error"):
+        print(f"Error: {result['error']}")
+    print(f"Feedback entries: {len(result.get('feedback', []))}")
 
 
 if __name__ == "__main__":
-    print("=== Loop Engineering — Starting ===")
     try:
-        result = asyncio.run(run_workflow())
-        print(f"\n=== Cycle {result['cycle_id']} complete ===")
-        print(f"Phase: {result['phase']}")
-        print(f"Metrics: {result['metrics'].model_dump()}")
-        print(f"Errors: {result['error']}")
-        print(f"Feedback entries: {len(result.get('feedback', []))}")
+        main()
     except KeyboardInterrupt:
         print("\n⚠ Interrupted by user")
         sys.exit(1)

@@ -1,6 +1,4 @@
-# interview-me
-
-```yaml
+---
 name: interview-me
 description: >
   Elicit requirements from the user one question at a time until
@@ -25,7 +23,9 @@ tools:
   - write_file
   - search_files
   - patch
-```
+---
+
+# interview-me
 
 ## Purpose
 

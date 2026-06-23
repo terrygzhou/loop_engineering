@@ -1,6 +1,4 @@
-# api-and-interface-design
-
-```yaml
+---
 name: api-and-interface-design
 description: >
   Contract-first API and interface design. Define types, schemas, and
@@ -24,7 +22,9 @@ tools:
   - write_file
   - search_files
   - patch
-```
+---
+
+# api-and-interface-design
 
 ## Purpose
 

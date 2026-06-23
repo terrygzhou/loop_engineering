@@ -1,6 +1,4 @@
-# incremental-implementation
-
-```yaml
+---
 name: incremental-implementation
 description: >
   Implement features as thin vertical slices — one task at a time,
@@ -24,7 +22,9 @@ tools:
   - search_files
   - patch
   - terminal
-```
+---
+
+# incremental-implementation
 
 ## Purpose
 

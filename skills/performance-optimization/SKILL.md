@@ -1,6 +1,4 @@
-# performance-optimization
-
-```yaml
+---
 name: performance-optimization
 description: >
   Measure-first performance optimization for FastAPI services. Profile
@@ -26,7 +24,9 @@ tools:
   - search_files
   - patch
   - terminal
-```
+---
+
+# performance-optimization
 
 ## Purpose
 

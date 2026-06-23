@@ -1,6 +1,4 @@
-# shipping-and-launch
-
-```yaml
+---
 name: shipping-and-launch
 description: >
   Pre-launch checklist, feature flags, rollback plans, and launch
@@ -25,7 +23,9 @@ tools:
   - search_files
   - patch
   - terminal
-```
+---
+
+# shipping-and-launch
 
 ## Purpose
 
