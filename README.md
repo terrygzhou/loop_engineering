@@ -49,28 +49,65 @@ Each LangGraph node chains its skills sequentially. A skill is skipped if missin
 
 **Total per full cycle**: ~20–35 LLM calls. BUILD loops (up to 2 retries) and conditional VERIFY sub-skills can push this higher.
 
-## Running
+## Quick Start
 
-### CLI (headless, terminal)
+### Prerequisites
 
-```bash
-python main.py                              # interactive — prompts for name & spec
-python main.py --project myapp --spec "..." # auto-approve with inline spec
-python main.py --project myapp --context /path/to/existing  # scan existing codebase
-python main.py --project myapp --auto-approve  # skip all HIL gates (fully unattended)
-```
+- **Python 3.12+** with venv support
+- **Docker** + **Docker Compose** (for ChromaDB server and Web UI)
+- **LLM endpoint** (OpenAI-compatible, e.g., vLLM on `http://localhost:8080/v1`)
 
-### Web UI (browser, real-time)
+### 1. Set up the virtual environment
 
 ```bash
-cd frontend/backend && python app.py        # starts on http://localhost:8011
+cd <project_root>
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Open `http://localhost:8011`. Enter project name, spec, and optionally a context folder. Click **Start Workflow** — progress streams via WebSocket with quality gates dashboard, phase duration timers, deduplicated artifact log, and tabbed phase details.
+All subsequent commands should run with the venv activated (`source .venv/bin/activate`).
 
-Both modes share the same `WorkflowRunner` / `LangGraph` pipeline — identical node execution, different user-facing interfaces.
+### 2. Start ChromaDB server (for pattern storage)
 
-> ⚠️ **Token Usage Warning**: A full DISCOVER→SHIP cycle makes 20–35 LLM calls, each consuming a large context window. Extended BUILD loops or REFLECT iterations multiply this. Unattended runs (`--auto-approve`) with no human intervention can accumulate significant API costs or local GPU compute time. **Always monitor your provider's usage dashboard during long runs.** Consider setting `--auto-approve` only for trusted, well-scoped tasks.
+ChromaDB stores cycle feedback and historical patterns for self-improvement. The workflow degrades gracefully without it, but pattern storage requires a running server.
+
+```bash
+docker run -d --name chromadb-main -p 8000:8000 -v chroma_data:/chroma/chroma chromadb/chroma:latest
+```
+
+The container persists data in the `chroma_data` named volume. Verify connectivity:
+
+```bash
+python3 -c "import chromadb; c = chromadb.HttpClient(host='localhost', port=8000); print('OK')"
+```
+
+If no server is available, the client falls back to an embedded in-memory store (patterns are not persisted across runs).
+
+### 3. Run the CLI workflow
+
+```bash
+# Interactive mode (stops at HIL gates for approval)
+python3 main.py --project my_project --spec "Your project description"
+
+# Auto-approve mode (runs all phases without user interaction)
+python3 main.py --project my_project --spec "Your project description" --auto-approve
+
+# With existing codebase context
+python3 main.py --project my_project --spec "Update API" --context ./existing_code
+```
+
+Projects are created under `./<project_name>` relative to the current directory.
+
+### 4. (Optional) Run the Web UI
+
+```bash
+cd frontend && docker compose up -d --build
+```
+
+The Web UI is available at `http://localhost:8011`.
+
+> ⚠️ **Token Usage Warning**: A full cycle makes 20–35 LLM calls. Unattended runs can accumulate significant API costs. Monitor your provider's usage dashboard during long runs.
 
 ## LLM Providers
 
