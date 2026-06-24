@@ -1,23 +1,23 @@
 """
 LLM integration via local vLLM (Qwen3.6-27B) using OpenAI-compatible API.
-Graceful fallback when langchain-openai is not installed.
+Uses distilled skill instructions (Purpose + Process only) for fast context windows.
 """
 import os
+from tools.distiller import distill_skill
 
-# Lazy import — gracefully handle missing langchain-openai
 _import_error = None
 try:
     from langchain_openai import ChatOpenAI
     from langchain_core.messages import HumanMessage, SystemMessage
 except ImportError as e:
     _import_error = str(e)
-    ChatOpenAI = None  # type: ignore
-    HumanMessage = None  # type: ignore
-    SystemMessage = None  # type: ignore
+    ChatOpenAI = None
+    HumanMessage = None
+    SystemMessage = None
 
 
 def get_llm(model: str = None, base_url: str = None):
-    """Get a configured vLLM LLM instance (OpenAI-compatible). Returns None if langchain_openai unavailable."""
+    """Get a configured LLM instance. Returns None if langchain_openai unavailable."""
     if ChatOpenAI is None:
         print(f"WARNING: langchain_openai not installed ({_import_error}). Running in dry-run mode.")
         return None
@@ -36,22 +36,30 @@ def get_llm(model: str = None, base_url: str = None):
     )
 
 
-def invoke_skill(skill_content: str, task: str, context: str = "", llm=None):
+def invoke_skill(skill_content: str, task: str, context: str = "", llm=None, max_prompt_chars: int = 2000):
     """
-    Invoke a skill: combine its instructions with the task and context,
+    Invoke a skill: distill its instructions, combine with task + context,
     send to the LLM, and return the response.
-    Falls back to echo mode when LLM is unavailable.
+
+    Args:
+        skill_content: Raw SKILL.md content (distilled automatically).
+        task: What to accomplish.
+        context: Additional project context.
+        llm: Pre-created LLM instance (created if None).
+        max_prompt_chars: Max chars for the distilled skill portion.
     """
     if llm is None:
         llm = get_llm()
 
     if llm is None:
-        # Dry-run: return summary of what would happen
         return f"[DRY-RUN] Skill({len(skill_content)} chars) → Task: {task}"
+
+    # Distill skill to essential instructions
+    distilled = distill_skill(skill_content, max_chars=max_prompt_chars)
 
     system_prompt = (
         f"You are an expert following these instructions:\n\n"
-        f"{skill_content}\n\n"
+        f"{distilled}\n\n"
         f"Respond with actionable output. Be specific, include file paths, "
         f"code snippets, and verification steps."
     )
