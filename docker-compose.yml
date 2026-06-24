@@ -9,17 +9,21 @@ services:
 
   orchestrator:
     build: .
-    # CLI tool — no port needed. LLM runs externally (vLLM on host).
-    environment:
-      - LLM_BASE_URL=http://host.docker.internal:8080/v1
-      - CHROMA_URL=http://chromadb:8000
-      - HIL_MODE=cli
-      - SKILLS_DIR=/root/.hermes/skills
-    volumes:
-      - skills_data:/root/.hermes/skills
-    depends_on:
-      - chromadb
-    restart: unless-stopped
+    orchestrator:
+      build: .
+      # CLI tool — no port needed. LLM runs externally (vLLM on host).
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      environment:
+        - LLM_BASE_URL=http://host.docker.internal:8080/v1
+        - CHROMA_URL=http://chromadb:8000
+        - HIL_MODE=cli
+        - SKILLS_DIR=/root/.hermes/skills
+      volumes:
+        - skills_data:/root/.hermes/skills
+      depends_on:
+        - chromadb
+      restart: unless-stopped
 
 volumes:
   chroma_data:
