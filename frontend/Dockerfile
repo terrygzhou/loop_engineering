@@ -30,7 +30,7 @@ RUN rm -f /etc/nginx/sites-enabled/default && \
     ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
 
 # Create writable project directory
-RUN mkdir -p /tmp/loop_projects
+RUN mkdir -p /workspace/projects
 
 # Create mount point for parent Loop Engineering project
 VOLUME /loop_engineering

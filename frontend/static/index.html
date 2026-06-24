@@ -9,7 +9,7 @@
 <body>
   <div class="app">
     <!-- Header -->
-    <header class="header">
+    <header class="header" role="banner">
       <div class="header-left">
         <h1 class="logo">Loop Engineering</h1>
         <span class="cycle-badge" id="cycle-badge">Cycle <span id="cycle-num">0</span></span>
@@ -19,7 +19,7 @@
         </span>
       </div>
       <div class="header-right">
-        <div class="status-badge" id="status-badge">
+        <div class="status-badge" id="status-badge" role="status" aria-live="polite" aria-label="Workflow status: IDLE">
           <span class="status-dot"></span>
           <span class="status-text">IDLE</span>
         </div>
@@ -33,15 +33,15 @@
       <div class="modal modal-wide">
         <div class="modal-header">
           <h3>Project Requirements</h3>
-          <button class="modal-close" id="req-close">&times;</button>
+          <button class="modal-close" id="req-close" aria-label="Close dialog">&times;</button>
         </div>
         <div class="modal-body">
-          <label class="form-label">Project Name</label>
+          <label class="form-label" for="req-project-name">Project Name</label>
           <input type="text" id="req-project-name" class="form-input" placeholder="e.g. My API Service">
-          <label class="form-label">Initial Idea</label>
+          <label class="form-label" for="req-spec">Initial Idea</label>
           <textarea id="req-spec" class="form-textarea" placeholder="Briefly describe what you want built.&#10;&#10;The workflow will interview you for details as each phase needs them." rows="3"></textarea>
           <p class="form-hint">Once started, the workflow will interview you through each phase using skill-driven questions (core behavior, data model, API surface, etc.).</p>
-          <label class="form-label" style="margin-top:12px;">Context Folder <span style="color:var(--text-muted);font-weight:normal;">(optional)</span></label>
+          <label class="form-label" for="req-context-folder">Context Folder <span style="color:var(--text-muted);font-weight:normal;">(optional)</span></label>
           <input type="text" id="req-context-folder" class="form-input" placeholder="e.g. /path/to/existing/codebase — leave empty for greenfield">
           <p class="form-hint">Provide a path to an existing codebase or docs folder for the DISCOVER phase to analyse. Leave empty for new projects (DISCOVER will be skipped).</p>
         </div>
@@ -58,56 +58,63 @@
       <section class="pipeline-section">
         <h2 class="section-title">Workflow Pipeline</h2>
         <div class="pipeline" id="pipeline">
-          <div class="pipeline-phase" data-phase="DISCOVER">
+          <div class="pipeline-phase" data-phase="DISCOVER" role="button" tabindex="0" aria-label="Discover phase">
             <div class="phase-icon">🔍</div>
             <div class="phase-label">DISCOVER</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="DEFINE">
+          <div class="pipeline-phase" data-phase="DEFINE" role="button" tabindex="0" aria-label="Define phase">
             <div class="phase-icon">📝</div>
             <div class="phase-label">DEFINE</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="PLAN">
+          <div class="pipeline-phase" data-phase="HUMAN_REVIEW" role="button" tabindex="0" aria-label="Human Review phase">
+            <div class="phase-icon">👤</div>
+            <div class="phase-label">REVIEW</div>
+            <div class="phase-duration"></div>
+            <div class="phase-status"></div>
+          </div>
+          <div class="pipeline-connector"></div>
+          <div class="pipeline-phase" data-phase="PLAN" role="button" tabindex="0" aria-label="Plan phase">
             <div class="phase-icon">📋</div>
             <div class="phase-label">PLAN</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="BUILD">
+          <div class="pipeline-phase" data-phase="BUILD" role="button" tabindex="0" aria-label="Build phase">
             <div class="phase-icon">🔨</div>
             <div class="phase-label">BUILD</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="SEED_DATA">
+          <div class="pipeline-phase" data-phase="SEED_DATA" role="button" tabindex="0" aria-label="Seed Data phase">
             <div class="phase-icon">🌱</div>
             <div class="phase-label">SEED</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="VERIFY">
+          <div class="pipeline-phase" data-phase="VERIFY" role="button" tabindex="0" aria-label="Verify phase">
             <div class="phase-icon">✅</div>
             <div class="phase-label">VERIFY</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="SHIP">
+          <div class="pipeline-phase" data-phase="SHIP" role="button" tabindex="0" aria-label="Ship phase">
             <div class="phase-icon">🚀</div>
             <div class="phase-label">SHIP</div>
             <div class="phase-duration"></div>
             <div class="phase-status"></div>
           </div>
           <div class="pipeline-connector"></div>
-          <div class="pipeline-phase" data-phase="REFLECT">
+          <div class="pipeline-phase" data-phase="REFLECT" role="button" tabindex="0" aria-label="Reflect phase">
             <div class="phase-icon">🔄</div>
             <div class="phase-label">REFLECT</div>
             <div class="phase-duration"></div>
@@ -174,17 +181,19 @@
       <!-- Content Area -->
       <div class="content-grid">
         <!-- Progress Log -->
-        <section class="progress-section">
+        <section class="progress-section" aria-label="Progress Log">
           <h2 class="section-title">Progress Log</h2>
-          <div class="progress-log" id="progress-log"></div>
+          <div class="progress-log" id="progress-log" role="log" aria-live="polite">
+            <p class="empty-state" id="progress-empty">No activity yet. Start a workflow to see progress here.</p>
+          </div>
         </section>
 
         <!-- Phase Details / Input -->
         <section class="detail-section" id="detail-section">
           <h2 class="section-title" id="detail-title">Phase Details</h2>
           <!-- Phase tabs for artifact navigation -->
-          <div class="phase-tabs" id="phase-tabs"></div>
-          <div class="detail-content" id="detail-content">
+          <div class="phase-tabs" id="phase-tabs" role="tablist"></div>
+          <div class="detail-content" id="detail-content" role="tabpanel" aria-label="Phase Details">
             <p class="detail-placeholder">Workflow output will appear here as phases complete</p>
           </div>
         </section>
@@ -195,7 +204,7 @@
         <div class="modal">
           <div class="modal-header">
             <h3 id="modal-title">User Input Required</h3>
-            <button class="modal-close" id="modal-close">&times;</button>
+            <button class="modal-close" id="modal-close" aria-label="Close dialog">&times;</button>
           </div>
           <div class="modal-body" id="modal-body"></div>
           <div class="modal-footer">

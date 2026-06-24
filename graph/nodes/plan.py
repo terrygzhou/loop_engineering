@@ -167,6 +167,7 @@ def plan_node(state: dict) -> dict:
     state["phase"] = "PLAN"
     state["feedback"] = state.get("feedback", []) + feedback
     state["next_phase"] = "BUILD"
+    state["human_approval_required"] = True
 
     print(f"  ✓ task_count={state['metrics'].task_count}, arch_uncertainty={arch_uncertainty:.2f}")
     return state

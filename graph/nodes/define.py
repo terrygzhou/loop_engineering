@@ -181,7 +181,8 @@ def define_node(state: dict) -> dict:
     })
     state["phase"] = "DEFINE"
     state["feedback"] = state.get("feedback", []) + feedback
-    state["next_phase"] = "PLAN"
+    state["next_phase"] = "HUMAN_REVIEW"
+    state["human_approval_required"] = False
 
     print(f"  ✓ spec_confidence={spec_confidence:.2f} (derived from artifact quality)")
     return state

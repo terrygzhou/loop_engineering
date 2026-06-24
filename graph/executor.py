@@ -4,6 +4,7 @@ Shared executor — singleton workflow core for both CLI (main.py) and Web (app.
 Both modes import this module. Graph construction, state initialization, and
 node execution are identical. Only the UX layer (CLI prompts vs WebSocket) differs.
 """
+import asyncio
 import sys
 from pathlib import Path
 from typing import Dict, Optional
@@ -16,6 +17,7 @@ if str(_project_root) not in sys.path:
 from config.loader import config  # noqa: E402
 from graph.main import build_graph  # noqa: E402
 from graph.state import CycleMetrics, WorkflowState  # noqa: E402
+from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
 from tools.loader import build_skill_registry  # noqa: E402
 
 
@@ -83,9 +85,9 @@ def build_executor_state(
     )
 
 
-def get_graph():
-    """Build and compile the LangGraph workflow. Cached per-process."""
-    return build_graph()
+def get_graph(checkpointer=None):
+    """Build and compile the LangGraph workflow. Pass a checkpointer for interrupt support."""
+    return build_graph(checkpointer=checkpointer)
 
 
 class WorkflowRunner:
@@ -95,12 +97,18 @@ class WorkflowRunner:
     The only difference is the HIL handler:
     - CLI: asks input() on stdin/stdout
     - Web: sends WebSocket events and waits for user reply
+
+    Each runner gets its own MemorySaver checkpointer + unique thread_id
+    for proper interrupt/resume support.
     """
 
-    HIL_PHASES = {"DEFINE", "PLAN", "VERIFY"}
+    HIL_PHASES = {"HUMAN_REVIEW", "PLAN", "VERIFY"}
 
     def __init__(self):
-        self.graph = get_graph()
+        import uuid as _uuid
+        self.checkpointer = MemorySaver()
+        self.graph = get_graph(checkpointer=self.checkpointer)
+        self.thread_id = str(_uuid.uuid4())
 
     def run_interactive(
         self,
@@ -133,45 +141,113 @@ class WorkflowRunner:
 
         # Stream through each node and collect HIL input
         import asyncio
-        result = asyncio.run(self._astream_with_hil(state, auto_approve, on_hil=self._hil_cli))
+
+        async def _run():
+            last = None
+            async for chunk in self._astream_with_hil(state, auto_approve, on_hil=self._hil_cli):
+                last = chunk
+            return last
+
+        result = asyncio.run(_run())
         return result
 
-    async def _astream_with_hil(self, state: WorkflowState, auto_approve: bool, on_hil):
-        """Stream graph execution, pausing at HIL gates."""
+    async def _astream_with_hil(self, state: WorkflowState, auto_approve: bool, on_hil, config=None):
+        """Stream graph execution with HIL gates via LangGraph interrupt_after.
+
+        astream() raises langgraph.types.interrupt at checkpoint boundaries.
+        Catch the exception, handle HIL, update state, and resume.
+        """
+        import uuid as _uuid
+        from langgraph.errors import GraphInterrupt
+        if config is None:
+            config = {"configurable": {"thread_id": str(_uuid.uuid4())}}
+
         current_phase = None
+        input_state = state  # first pass: initial state; subsequent: None to resume
 
-        async for chunk in self.graph.astream(state, stream_mode="values"):
-            phase = chunk.get("phase", "UNKNOWN")
+        while True:
+            try:
+                async for chunk in self.graph.astream(
+                    input_state, stream_mode="values", config=config
+                ):
+                    phase = chunk.get("phase", "UNKNOWN")
 
-            # Phase transition
-            if phase != current_phase:
-                if current_phase:
-                    print(f"\n[{current_phase}] Completed\n")
-                current_phase = phase
-                print(f"[{phase}] Started...")
+                    if phase != current_phase:
+                        if current_phase:
+                            print(f"\n[{current_phase}] Completed\n")
+                        current_phase = phase
+                        print(f"[{phase}] Started...")
 
-            # HIL gate
-            if chunk.get("human_approval_required") and phase in self.HIL_PHASES:
-                if auto_approve:
-                    print(f"  → Auto-approved {phase}")
-                    # Inject approval into state so edge routing proceeds
-                    chunk["human_approval_required"] = False
-                    # Set default user input so downstream nodes don't block
-                    interview_answers = self._default_interview(state)
-                    chunk["artifacts"]["interview_notes"] = interview_answers
-                    chunk["artifacts"]["user_input"] = {"approved": True}
-                else:
-                    input_data = on_hil(phase, chunk)
-                    if input_data:
-                        chunk["artifacts"]["user_input"] = input_data
-                        if "interview_notes" in input_data:
-                            chunk["artifacts"]["interview_notes"] = input_data["interview_notes"]
-                    chunk["human_approval_required"] = False
+                    yield chunk
 
-        if current_phase:
-            print(f"\n[{current_phase}] Completed\n")
+            except GraphInterrupt as e:
+                # Graph paused at interrupt_after — handle HIL gate
+                print(f"  → GraphInterrupt caught: {e}")
+                graph_state = await self.graph.aget_state(config)
+                is_interrupted = graph_state.next is not None and len(graph_state.next) > 0
 
-        return chunk
+                if not is_interrupted:
+                    if current_phase:
+                        print(f"\n[{current_phase}] Completed\n")
+                    break
+
+                next_nodes = graph_state.next
+                interrupted_phase = current_phase
+                current_chunk = graph_state.values or {}
+
+                if not current_chunk:
+                    print(f"  → WARNING: graph_state.values is None for phase {interrupted_phase}")
+
+                if interrupted_phase and interrupted_phase in self.HIL_PHASES:
+                    needs_approval = current_chunk.get("human_approval_required", False)
+
+                    if needs_approval:
+                        try:
+                            if auto_approve:
+                                print(f"  → Auto-approved {interrupted_phase}")
+                                interview_answers = self._default_interview(
+                                    graph_state.values or {}
+                                )
+                                update = {
+                                    "human_approval_required": False,
+                                    "artifacts": {
+                                        **(current_chunk.get("artifacts") or {}),
+                                        "interview_notes": interview_answers,
+                                        "user_input": {"approved": True},
+                                    },
+                                }
+                            else:
+                                input_data = await on_hil(interrupted_phase, current_chunk)
+                                update = {
+                                    "human_approval_required": False,
+                                }
+                                if input_data:
+                                    existing = (current_chunk.get("artifacts") or {}).copy()
+                                    existing["user_input"] = input_data
+                                    if "interview_notes" in input_data:
+                                        existing["interview_notes"] = input_data[
+                                            "interview_notes"
+                                        ]
+                                    if interrupted_phase == "HUMAN_REVIEW" and input_data.get("section_feedback"):
+                                        existing["human_review_feedback"] = input_data["section_feedback"]
+                                        for key, feedback in input_data["section_feedback"].items():
+                                            if feedback.get("edited") and feedback.get("content") is not None:
+                                                existing[key] = feedback["content"]
+                                    update["artifacts"] = existing
+                        except Exception as e:
+                            print(f"  → HIL error: {type(e).__name__}: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            update = {"human_approval_required": False}
+                    else:
+                        update = None
+
+                    if update:
+                        await self.graph.aupdate_state(config, update)
+                        print(f"  → State updated: resuming to {next_nodes}")
+
+                input_state = None  # resume from interrupt point
+                continue  # re-enter the try/except loop
 
     def _default_interview(self, state: WorkflowState) -> str:
         """Generate default interview notes when auto-approving."""
@@ -189,11 +265,19 @@ class WorkflowRunner:
             f"Non-functional: Standard performance targets\n"
         )
 
-    def _hil_cli(self, phase: str, state: WorkflowState) -> Optional[Dict[str, str]]:
-        """CLI handler for HIL — asks questions on stdin/stdout."""
+    async def _hil_cli(self, phase: str, state: WorkflowState) -> Optional[Dict[str, str]]:
+        """CLI handler for HIL — collects user input via stdin/stdout."""
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, self._hil_cli_sync, phase, state)
+        return result
+
+    def _hil_cli_sync(self, phase: str, state: WorkflowState) -> Optional[Dict[str, str]]:
+        """Synchronous part that actually blocks on input()."""
         print(f"\n  === {phase}: Human Input Required ===")
 
-        if phase == "DEFINE":
+        if phase == "HUMAN_REVIEW":
+            return self._cli_human_review(state)
+        elif phase == "DEFINE":
             return self._cli_interview()
         else:
             answer = input(f"  Approve {phase}? (y/n): ").strip().lower()
@@ -203,6 +287,67 @@ class WorkflowRunner:
                 feedback = input("  Feedback: ").strip()
                 return {"approved": False, "feedback": feedback}
             return {"approved": True}
+
+    def _cli_human_review(self, state: WorkflowState) -> dict:
+        """Display full DEFINE output for human review with per-section approval."""
+        from graph.nodes.review_contract import (
+            build_review_sections,
+            format_review_summary_for_cli,
+            format_review_section_for_cli,
+            make_review_result,
+        )
+
+        artifacts = state.get("artifacts", {})
+        sections = build_review_sections(artifacts)
+
+        # Summary
+        print("\n  === Human Review: Approve Each Section ===\n")
+        print(format_review_summary_for_cli(sections))
+
+        # Show full content and collect per-section decisions
+        section_feedback = {}
+        for sec in sections:
+            key = sec["key"]
+            title = sec["label"].upper()
+            content = sec["content"]
+
+            if content:
+                print(format_review_section_for_cli(title, content))
+            else:
+                print(f"\n  [{title}]: (not provided)")
+
+            answer = input(f"\n  Approve {title}? (y/n/e=edit): ").strip().lower()
+
+            if answer == "e":
+                # User wants to edit — collect replacement text
+                print(f"  Enter revised {title.lower()} (end with empty line):\n")
+                edits = []
+                while True:
+                    line = input()
+                    if not line:
+                        break
+                    edits.append(line)
+                if edits:
+                    new_content = "\n".join(edits)
+                    # Write the edited content back to artifacts
+                    artifacts[key] = new_content
+                    print(f"  ✓ {title} updated with {len(edits)} lines")
+                    section_feedback[key] = {"approved": True, "edited": True, "content": new_content}
+                else:
+                    section_feedback[key] = {"approved": True, "edited": False}
+            elif answer == "y":
+                section_feedback[key] = {"approved": True}
+            elif answer == "n":
+                comment = input(f"  Feedback for {title}: ").strip()
+                section_feedback[key] = {"approved": False, "comment": comment}
+            else:
+                # Default to approve
+                section_feedback[key] = {"approved": True}
+
+        result = make_review_result(section_feedback)
+        # Write feedback back to state
+        state["artifacts"]["human_review_feedback"] = section_feedback
+        return result.to_dict()
 
     def _cli_interview(self) -> Dict[str, str]:
         """Ask interview questions from interview-me skill."""

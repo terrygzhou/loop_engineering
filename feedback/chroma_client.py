@@ -27,8 +27,14 @@ def get_chroma_client(url: str = None):
             port=int(url.split(":")[-1])
         )
     except Exception as e:
-        print(f"WARNING: Could not connect to ChromaDB: {e}")
-        return None
+        # Fallback to embedded client when no server is available
+        try:
+            client = chromadb.Client()
+            print(f"INFO: Using embedded ChromaDB (HTTP server unavailable)")
+            return client
+        except Exception as embed_err:
+            print(f"WARNING: Could not connect to ChromaDB: {e} (embedded fallback failed: {embed_err})")
+            return None
 
 
 def init_collections(client):

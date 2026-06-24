@@ -64,4 +64,62 @@ All settings follow a three-tier priority: **Environment Variables** > **`config
 - **Study feedback modules** to understand the self-improvement loop and pattern storage.
 - **Check frontend modules** to understand how the Web UI bridges to the shared LangGraph workflow.
 
-Each module doc follows a consistent template: Purpose, Public API (with signatures, parameters, return types, side effects), Dependencies, and Notes/Caveats.
+Each module doc follows a consistent template: Purpose, Public API (with signatures, parameters, return types, side effects), and Notes/Caveats.
+
+## Quick Start
+
+### Prerequisites
+
+- **Python 3.12+** with venv support
+- **Docker** + **Docker Compose** (for ChromaDB server and Web UI)
+- **LLM endpoint** (OpenAI-compatible, e.g., vLLM on `http://localhost:8080/v1`)
+
+### 1. Set up the virtual environment
+
+```bash
+cd <project_root>
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+All subsequent commands should run with the venv activated (`source .venv/bin/activate`).
+
+### 2. Start ChromaDB server (for pattern storage)
+
+ChromaDB stores cycle feedback and historical patterns for self-improvement. The workflow degrades gracefully without it, but pattern storage requires a running server.
+
+```bash
+docker run -d --name chromadb-main -p 8000:8000 -v chroma_data:/chroma/chroma chromadb/chroma:latest
+```
+
+The container persists data in the `chroma_data` named volume. Verify connectivity:
+
+```bash
+python3 -c "import chromadb; c = chromadb.HttpClient(host='localhost', port=8000); print('OK')"
+```
+
+If no server is available, the client falls back to an embedded in-memory store (patterns are not persisted across runs).
+
+### 3. Run the CLI workflow
+
+```bash
+# Interactive mode (stops at HIL gates for approval)
+python3 main.py --project my_project --spec "Your project description"
+
+# Auto-approve mode (runs all phases without user interaction)
+python3 main.py --project my_project --spec "Your project description" --auto-approve
+
+# With existing codebase context
+python3 main.py --project my_project --spec "Update API" --context ./existing_code
+```
+
+Projects are created under `~/projects/<project_name>` (or `./<project_name>` in the current directory).
+
+### 4. (Optional) Run the Web UI
+
+```bash
+cd frontend && docker compose up -d --build
+```
+
+The Web UI is available at `http://localhost:8011`.

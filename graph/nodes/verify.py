@@ -218,6 +218,7 @@ def verify_node(state: dict) -> dict:
     state["phase"] = "VERIFY"
     state["feedback"] = state.get("feedback", []) + feedback
     state["next_phase"] = "SHIP"
+    state["human_approval_required"] = True
 
     print(f"  Done: uat_pass_rate={uat_pass}, endpoints_checked={len(api_endpoints)}, pages_checked={len(page_routes)}")
     return state

@@ -48,5 +48,18 @@ def human_review_node(state: WorkflowState) -> WorkflowState:
     state["phase"] = "HUMAN_REVIEW"
     state["human_approval_required"] = True
 
-    print("\n  → Awaiting human review...\n")
-    return state
+    print(f"\n  → Awaiting human review...\n")
+
+    # Raise GraphInterrupt to pause execution and trigger HIL handler
+    # The executor's _astream_with_hil will catch this, call _cli_human_review,
+    # update state with feedback, and resume.
+    from langgraph.errors import GraphInterrupt
+    raise GraphInterrupt(
+        interrupts=[
+            {
+                "type": "human_review",
+                "phase": "HUMAN_REVIEW",
+                "message": "Review DEFINE output and approve/reject each section (y/n/e=edit)",
+            }
+        ]
+    )

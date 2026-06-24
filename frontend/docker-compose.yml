@@ -10,10 +10,10 @@ services:
       - ../:/loop_engineering:ro
       # Mount skills directory (read-only)
       - ../skills:/app/skills:ro
-      # Writable project output directory
-      - /tmp/loop_projects
+      # Writable project output directory (matches CLI default)
+      - ~/workspace/projects:/workspace/projects
     environment:
       - SKILLS_DIR=/app/skills
       - LLM_BASE_URL=http://172.17.0.1:8080/v1
-      # Writable project path inside container
-      - PROJECT_PATH=/tmp/loop_projects
+      # Writable project path inside container (matches CLI default)
+      - PROJECT_PATH=/workspace/projects

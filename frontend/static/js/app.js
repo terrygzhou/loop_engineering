@@ -214,6 +214,12 @@ function handleProgressEvent(event) {
     return;
   }
 
+  // Handle human review of DEFINE output
+  if (event.action === 'review' && event.data && event.data.type === 'human_review') {
+    renderReview(event.phase, event.data);
+    return;
+  }
+
   // Deduplicate: only render new progress entries
   if (event.action === 'artifact') {
     renderArtifactEvent(event);
@@ -238,6 +244,10 @@ function updatePhaseState(phase, action, data, event) {
       break;
     case 'waiting':
       ps.status = 'waiting';
+      // If backend is waiting for review approval, show modal immediately
+      if (data && data.type === 'review_approval') {
+        showInputModal(phase);
+      }
       break;
     case 'completed':
       ps.status = 'complete';
@@ -308,9 +318,17 @@ function renderPipeline() {
     const phase = state.phases[phaseName];
     if (!phase) return;
 
-    // Update status indicator
+    // Make keyboard accessible
+    if (!el.hasAttribute('role')) {
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+    }
+
+    // Update status indicator with screen-reader text (not color alone — WCAG)
     const statusEl = el.querySelector('.phase-status');
+    const statusText = phase.status || '';
     statusEl.className = `phase-status ${phase.status}`;
+    statusEl.setAttribute('aria-label', statusText || 'pending');
 
     // Update phase card state
     el.className = 'pipeline-phase';
@@ -319,6 +337,10 @@ function renderPipeline() {
     if (phase.status === 'error') el.classList.add('error');
     if (phase.status === 'waiting') el.classList.add('waiting');
     if (phase.status === 'active' || state.workflow.phase === phaseName) el.classList.add('active');
+
+    // Update ARIA label with current status
+    el.setAttribute('aria-label', `${phaseName} phase — ${phase.status || 'pending'}`);
+    el.setAttribute('aria-describedby', 'detail-title');
 
     // Phase duration
     const durationEl = el.querySelector('.phase-duration');
@@ -338,6 +360,12 @@ function renderProgressLog() {
   const newMessages = state.messages.slice(state.lastRenderedMsgCount);
   if (newMessages.length === 0) return;
 
+  // Hide empty state when first message arrives
+  const emptyEl = document.getElementById('progress-empty');
+  if (emptyEl && emptyEl.style.display !== 'none') {
+    emptyEl.style.display = 'none';
+  }
+
   newMessages.forEach((msg) => {
     // Deduplicate: skip artifact entries we've already shown
     if (msg.action === 'artifact') {
@@ -349,9 +377,9 @@ function renderProgressLog() {
     const entry = document.createElement('div');
     entry.className = 'log-entry new';
     entry.innerHTML = `
-      <span class="log-phase ${msg.phase}">${msg.phase}</span>
+      <span class="log-phase ${msg.phase}" aria-label="Phase: ${msg.phase}">${msg.phase}</span>
       <span class="log-message">
-        <span class="log-action ${msg.action}">${msg.action}</span>
+        <span class="log-action ${msg.action}" aria-label="Action: ${msg.action}">${msg.action}</span>
         ${escapeHtml(msg.message)}
       </span>
       <span class="log-time">${formatTime(msg.timestamp)}</span>
@@ -366,12 +394,18 @@ function renderProgressLog() {
 }
 
 function renderProgressEvent(event) {
+  // Hide empty state when first message arrives
+  const emptyEl = document.getElementById('progress-empty');
+  if (emptyEl && emptyEl.style.display !== 'none') {
+    emptyEl.style.display = 'none';
+  }
+
   const entry = document.createElement('div');
   entry.className = 'log-entry new';
   entry.innerHTML = `
-    <span class="log-phase ${event.phase}">${event.phase}</span>
+    <span class="log-phase ${event.phase}" aria-label="Phase: ${event.phase}">${event.phase}</span>
     <span class="log-message">
-      <span class="log-action ${event.action}">${event.action}</span>
+      <span class="log-action ${event.action}" aria-label="Action: ${event.action}">${event.action}</span>
       ${escapeHtml(event.message)}
     </span>
     <span class="log-time">${formatTime(event.timestamp)}</span>
@@ -390,6 +424,12 @@ function renderProgressEvent(event) {
 }
 
 function renderArtifactEvent(event) {
+  // Hide empty state when first message arrives
+  const emptyEl = document.getElementById('progress-empty');
+  if (emptyEl && emptyEl.style.display !== 'none') {
+    emptyEl.style.display = 'none';
+  }
+
   const key = `${event.phase}:${event.data?.artifact_name}`;
   if (state.shownArtifacts[key]) return;
   state.shownArtifacts[key] = true;
@@ -397,9 +437,9 @@ function renderArtifactEvent(event) {
   const entry = document.createElement('div');
   entry.className = 'log-entry new';
   entry.innerHTML = `
-    <span class="log-phase ${event.phase}">${event.phase}</span>
+    <span class="log-phase ${event.phase}" aria-label="Phase: ${event.phase}">${event.phase}</span>
     <span class="log-message">
-      <span class="log-action ${event.action}">${event.action}</span>
+      <span class="log-action ${event.action}" aria-label="Action: ${event.action}">${event.action}</span>
       ${escapeHtml(event.message)}
     </span>
     <span class="log-time">${formatTime(event.timestamp)}</span>
@@ -602,14 +642,15 @@ function renderInterview(phase, questions) {
       ${questions.map((q, i) => `
         <div class="interview-question" style="--phase-color: var(--color-define);">
           <div class="q-category">${q.label}</div>
-          <div class="q-text">${q.question}${q.required ? '<span class="q-required"> (required)</span>' : ''}</div>
-          <textarea class="form-textarea interview-answer" data-index="${i}"
+          <div class="q-text">${q.question}${q.required ? '<span class="q-required" aria-label="required field"> (required)</span>' : ''}</div>
+          <label class="screen-reader-only" for="interview-answer-${i}">${q.question}</label>
+          <textarea class="form-textarea interview-answer" id="interview-answer-${i}" data-index="${i}"
                     data-category="${q.category}" rows="2"
                     placeholder="${q.placeholder}"></textarea>
         </div>
       `).join('')}
     </div>
-    <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+    <div class="interview-actions">
       <button class="btn btn-secondary" id="interview-cancel">Skip Interview</button>
       <button class="btn btn-primary" id="interview-submit">Submit Answers</button>
     </div>
@@ -653,6 +694,163 @@ function renderInterview(phase, questions) {
     dom.detailTitle.textContent = `${phase} — Interview Skipped`;
     dom.detailContent.innerHTML = '<p class="detail-placeholder">Interview skipped. The workflow will continue with available context.</p>';
   });
+}
+
+// ─── Human Review (same as CLI: per-section approve/edit/reject) ──
+function renderReview(phase, data) {
+  state.interviewActive = true;
+  state.interviewPhase = phase;
+
+  const sections = data.sections || [];
+  const summary = data.summary || {};
+  const metrics = data.metrics || {};
+
+  // Summary header
+  let summaryHtml = '<div class="review-summary"><h3>Review Summary</h3>';
+  for (const [key, desc] of Object.entries(summary)) {
+    summaryHtml += `<p><strong>${key}:</strong> ${desc}</p>`;
+  }
+  if (metrics.spec_confidence != null) {
+    summaryHtml += `<p><strong>spec_confidence:</strong> ${metrics.spec_confidence.toFixed(2)}</p>`;
+  }
+  summaryHtml += '</div>';
+
+  // Per-section review blocks
+  let sectionsHtml = sections.map((s, i) => {
+    const content = s.content || '';
+    const display = content ? escapeHtml(content) : '(not provided)';
+    return `
+      <div class="review-section" id="review-section-${i}">
+        <div class="review-section-header">
+          <h4>${s.label} (${s.word_count || 0} words)</h4>
+          <div class="review-section-actions">
+            <button class="btn btn-sm btn-approve" data-section="${s.key}" data-index="${i}">Approve</button>
+            <button class="btn btn-sm btn-edit" data-section="${s.key}" data-index="${i}">Edit</button>
+            <button class="btn btn-sm btn-reject" data-section="${s.key}" data-index="${i}">Reject</button>
+          </div>
+        </div>
+        <div class="review-section-content">
+          <pre class="detail-artifact-value">${display}</pre>
+        </div>
+        <div class="review-section-edit" id="review-edit-${i}" style="display:none;">
+          <textarea class="form-textarea" id="review-edit-text-${i}" rows="10"
+                    placeholder="Enter revised content...">${content}</textarea>
+          <div class="review-edit-actions">
+            <button class="btn btn-sm btn-save-edit" data-index="${i}" data-section="${s.key}">Save</button>
+            <button class="btn btn-sm btn-cancel-edit" data-index="${i}">Cancel</button>
+          </div>
+        </div>
+        <div class="review-section-feedback" id="review-feedback-${i}" style="display:none;">
+          <textarea class="form-textarea" id="review-feedback-text-${i}" rows="2"
+                    placeholder="Feedback on this section..."></textarea>
+          <button class="btn btn-sm btn-submit-feedback" data-index="${i}" data-section="${s.key}">Submit Feedback</button>
+        </div>
+        <div class="review-section-status" id="review-status-${i}"></div>
+      </div>
+    `;
+  }).join('');
+
+  // Submit all button
+  const actionsHtml = `
+    <div class="review-actions">
+      <button class="btn btn-secondary" id="review-cancel">Reject All</button>
+      <button class="btn btn-primary" id="review-approve-all">Approve All</button>
+    </div>
+  `;
+
+  dom.detailTitle.textContent = `${phase} — Human Review`;
+  dom.detailContent.innerHTML = summaryHtml + sectionsHtml + actionsHtml;
+
+  // Track per-section decisions: {key: {approved, comment?, edited?}}
+  const reviewState = {};
+
+  // Bind approve buttons
+  document.querySelectorAll('.btn-approve').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = btn.dataset.index, key = btn.dataset.section;
+      reviewState[key] = {approved: true};
+      document.getElementById(`review-status-${idx}`).innerHTML = '<span class="status-approved">✓ Approved</span>';
+    });
+  });
+
+  // Bind edit buttons
+  document.querySelectorAll('.btn-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = btn.dataset.index;
+      document.getElementById(`review-edit-${idx}`).style.display = 'block';
+      document.getElementById(`review-content-${idx}`).style.display = 'none';
+    });
+  });
+
+  // Bind save edit buttons
+  document.querySelectorAll('.btn-save-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = btn.dataset.index, key = btn.dataset.section;
+      const textarea = document.getElementById(`review-edit-text-${idx}`);
+      const edited = textarea.value;
+      reviewState[key] = {approved: true, edited: true, content: edited};
+      document.getElementById(`review-status-${idx}`).innerHTML = '<span class="status-edited">✓ Edited & Approved</span>';
+      document.getElementById(`review-edit-${idx}`).style.display = 'none';
+    });
+  });
+
+  // Bind cancel edit buttons
+  document.querySelectorAll('.btn-cancel-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = btn.dataset.index;
+      document.getElementById(`review-edit-${idx}`).style.display = 'none';
+    });
+  });
+
+  // Bind reject buttons
+  document.querySelectorAll('.btn-reject').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = btn.dataset.index;
+      document.getElementById(`review-feedback-${idx}`).style.display = 'block';
+    });
+  });
+
+  // Bind submit feedback buttons
+  document.querySelectorAll('.btn-submit-feedback').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = btn.dataset.index, key = btn.dataset.section;
+      const textarea = document.getElementById(`review-feedback-text-${idx}`);
+      reviewState[key] = {approved: false, comment: textarea.value};
+      document.getElementById(`review-status-${idx}`).innerHTML = '<span class="status-rejected">✗ Rejected — feedback sent</span>';
+      document.getElementById(`review-feedback-${idx}`).style.display = 'none';
+    });
+  });
+
+  // Approve all
+  document.getElementById('review-approve-all').addEventListener('click', () => {
+    const allSections = sections.map(s => s.key);
+    const sectionFeedback = {};
+    for (const key of allSections) {
+      sectionFeedback[key] = reviewState[key] || {approved: true};
+    }
+    submitInput(phase, 'human_review', {approved: true, section_feedback: sectionFeedback});
+    finishReview();
+    dom.detailTitle.textContent = `${phase} — Approved`;
+    dom.detailContent.innerHTML = '<p class="detail-placeholder">All sections approved. The workflow will continue to PLAN...</p>';
+  });
+
+  // Reject all
+  document.getElementById('review-cancel').addEventListener('click', () => {
+    const allSections = sections.map(s => s.key);
+    const sectionFeedback = {};
+    for (const key of allSections) {
+      sectionFeedback[key] = reviewState[key] || {approved: false, comment: 'Rejected (no comment)'};
+    }
+    submitInput(phase, 'human_review', {approved: false, section_feedback: sectionFeedback});
+    finishReview();
+    dom.detailTitle.textContent = `${phase} — Rejected`;
+    dom.detailContent.innerHTML = '<p class="detail-placeholder">Workflow will loop back to DEFINE for revisions.</p>';
+  });
+
+  function finishReview() {
+    state.interviewActive = false;
+    state.interviewPhase = null;
+  }
 }
 
 // ─── Event Listeners ─────────────────────────────────────────────
@@ -720,6 +918,45 @@ function setupEventListeners() {
       tab.classList.toggle('active', tab.dataset.phase === phaseName);
     });
   });
+
+  // Phase keyboard activation (Enter/Space)
+  dom.pipeline.addEventListener('keydown', (e) => {
+    const phaseEl = e.target.closest('.pipeline-phase');
+    if (!phaseEl) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      phaseEl.click();
+    }
+  });
+
+  // Modal focus trap
+  const trapFocus = (e, container) => {
+    const focusable = container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.key === 'Tab') {
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    if (e.key === 'Escape') {
+      closeModal();
+      const cancelBtn = document.getElementById('btn-cancel-req');
+      if (cancelBtn) cancelBtn.click();
+    }
+  };
+
+  dom.modalOverlay.addEventListener('keydown', (e) => trapFocus(e, dom.modalOverlay));
+  document.getElementById('requirement-overlay').addEventListener('keydown', (e) => trapFocus(e, document.getElementById('requirement-overlay')));
 }
 
 // ─── Polling ─────────────────────────────────────────────────────

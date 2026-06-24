@@ -126,7 +126,7 @@ async def start_workflow(req: StartRequest):
     bridge._spec_text = req.spec
     bridge._project_name = req.project_name
     bridge._context_folder = req.context_folder
-    bridge._auto_approve = True  # dry-run: auto-approve HIL gates when no WS clients
+    bridge._auto_approve = False  # Let the UI flow wait for user input at HIL gates
     bridge._aborted = False
     bridge._run_task = asyncio.create_task(bridge.run_real())
     return {"status": "started", "cycle": bridge.cycle}

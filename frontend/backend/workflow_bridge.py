@@ -101,12 +101,12 @@ class WorkflowBridge:
 
     # Phases in order
     PHASES = [
-        "DISCOVER", "DEFINE", "PLAN", "BUILD",
+        "DISCOVER", "DEFINE", "HUMAN_REVIEW", "PLAN", "BUILD",
         "SEED_DATA", "VERIFY", "SHIP", "REFLECT",
     ]
 
     # Phases where we wait for user input
-    HIL_PHASES = {"DEFINE", "PLAN", "VERIFY"}
+    HIL_PHASES = {"HUMAN_REVIEW", "PLAN", "VERIFY"}
 
     def __init__(self):
         self.status = "idle"
@@ -120,6 +120,7 @@ class WorkflowBridge:
         self._lock = asyncio.Lock()
         self._run_task: Optional[asyncio.Task] = None
         self._aborted = False
+        self._auto_approve = False
         self._seen_artifacts: Dict[str, Any] = {}
         self._use_real_workflow = False
         self._build_graph = None
@@ -267,6 +268,51 @@ class WorkflowBridge:
         )
         await self.broadcast(ev)
 
+    async def _send_review(self, phase: str, chunk: dict):
+        """Send full DEFINE output to the UI for human review.
+
+        Uses the shared review_contract to build identical section payloads
+        as the CLI executor — same keys, labels, content, and word counts.
+        """
+        import importlib.util
+        from pathlib import Path
+        # Load review_contract directly, bypassing graph/nodes/__init__.py which
+        # triggers human_review_node import chain that requires 'graph' as top-level pkg
+        # Resolve the same way as _try_import_real — try local then Docker mount
+        _rc_candidates = [
+            Path(__file__).resolve().parent.parent.parent / "graph" / "nodes" / "review_contract.py",  # local
+            Path("/loop_engineering/graph/nodes/review_contract.py"),                                # Docker
+        ]
+        _rc_path = None
+        for c in _rc_candidates:
+            if c.exists():
+                _rc_path = c
+                break
+        if not _rc_path:
+            raise FileNotFoundError(f"Cannot find review_contract.py in {_rc_candidates}")
+        _spec = importlib.util.spec_from_file_location("review_contract", _rc_path)
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        build_review_sections = _mod.build_review_sections
+        build_review_summary = _mod.build_review_summary
+        build_review_metrics = _mod.build_review_metrics
+
+        artifacts = chunk.get("artifacts", {})
+        sections = build_review_sections(artifacts)
+        metrics = build_review_metrics(chunk)
+
+        ev = self.add_event(
+            phase, "review",
+            f"{phase}: review DEFINE output before proceeding to PLAN",
+            {
+                "type": "human_review",
+                "summary": build_review_summary(sections),
+                "sections": sections,
+                "metrics": metrics,
+            },
+        )
+        await self.broadcast(ev)
+
     async def _wait_for_user_input(self, phase: str):
         """Block until user provides input or times out (30 min)."""
         self.status = "waiting"
@@ -331,9 +377,48 @@ class WorkflowBridge:
             ev = self.add_event(phase, "artifact", f"Generated: {artifact_name}", {"artifact_name": artifact_name, "artifact_value": artifact_value})
             await self.broadcast(ev)
 
-            # Interview at DEFINE — skill-driven
+            # HIL at DEFINE: send interview questions (skill-driven)
             if phase == "DEFINE":
                 await self._send_interview(phase)
+                # Populate simulated artifacts for the review phase
+                self.phase_states["DEFINE"]["artifacts"]["spec_refined"] = (
+                    f"## Simulated Specification for {self._project_name or 'Untitled'}\n\n"
+                    "This feature provides a complete end-to-end workflow for managing "
+                    "user requirements through automated specification, planning, and implementation.\n\n"
+                    "### Key Features\n"
+                    "- Requirement gathering via interview\n"
+                    "- Automated specification generation\n"
+                    "- Human review and approval gates\n"
+                    "- Iterative build-verify-reflect cycles"
+                )
+                self.phase_states["DEFINE"]["artifacts"]["api_contract"] = (
+                    f"### API Contract\n\n"
+                    "```\n"
+                    "POST /api/workflow/start\n"
+                    "  Body: { project_name, spec, context_folder }\n"
+                    "  Response: { status, cycle }\n\n"
+                    "GET /api/status\n"
+                    "  Response: { status, phase, cycle, phases, waiting_for }\n\n"
+                    "POST /api/input\n"
+                    "  Body: { phase, input_type, value }\n"
+                    "  Response: { status, phase }\n\n"
+                    "WS /ws/progress\n"
+                    "  Events: { timestamp, phase, action, message, data }\n"
+                    "```\n"
+                )
+                self.phase_states["DEFINE"]["artifacts"]["interview_notes"] = (
+                    "### Interview Notes\n"
+                    "- Core behavior: Full workflow automation from requirement to deployment\n"
+                    "- Data model: WorkflowState with cycle tracking\n"
+                    "- API surface: REST + WebSocket\n"
+                    "- Deployment: Docker Compose"
+                )
+
+            # HIL at HUMAN_REVIEW: present full spec/artifacts for review before PLAN
+            # Use DEFINE phase artifacts (spec_refined, api_contract, interview_notes)
+            if phase == "HUMAN_REVIEW":
+                define_state = self.phase_states.get("DEFINE", {"artifacts": {}, "metrics": None})
+                await self._send_review(phase, define_state)
                 await self._wait_for_user_input(phase)
 
             # HIL at PLAN / VERIFY
@@ -398,16 +483,40 @@ class WorkflowBridge:
 
         try:
             # Stream events from LangGraph — each iteration is a node execution
-            # Auto-approve HIL gates when no WS clients are connected (dry-run / headless mode)
-            effective_auto_approve = auto_approve or (self._auto_approve or not self.websocket_clients)
+            async def on_hil_bridge(phase, chunk):
+                """Bridge HIL handler — wait for user input at HIL gates.
 
-            def on_hil_bridge(phase, chunk):
-                """Bridge HIL handler — forwards to WS clients or auto-approves."""
-                if effective_auto_approve:
+                Auto-approve when no WS clients connected (headless).
+                When WS clients are connected, wait up to 30 min for user input.
+                """
+                has_clients = bool(self.websocket_clients)
+
+                if not has_clients:
+                    print(f"  → Auto-approved {phase} (no WS clients)")
                     return {"approved": True}
-                return None  # bridge's outer loop handles HIL via _wait_for_user_input
 
-            async for chunk in runner._astream_with_hil(state, effective_auto_approve, on_hil_bridge):
+                # Wait for user input — poll every second, timeout 30 min
+                self.status = "waiting"
+                self.waiting_for = phase
+                ev = self.add_event(phase, "waiting", f"Waiting for user input — {phase} phase", {"type": "review_approval"})
+                await self.broadcast(ev)
+
+                for _ in range(1800):
+                    await asyncio.sleep(1)
+                    if phase in self.user_inputs:
+                        inp = self.user_inputs.pop(phase)
+                        self.waiting_for = None
+                        ev = self.add_event(phase, "progress", "User input received")
+                        await self.broadcast(ev)
+                        return inp or {"approved": True}
+
+                # Timeout — auto-approve
+                self.waiting_for = None
+                ev = self.add_event(phase, "progress", f"{phase} auto-approved (timeout)")
+                await self.broadcast(ev)
+                return {"approved": True}
+
+            async for chunk in runner._astream_with_hil(state, self._auto_approve, on_hil_bridge):
                 if self._aborted:
                     break
 
@@ -444,14 +553,18 @@ class WorkflowBridge:
                     if phase == "DEFINE":
                         await self._send_interview(phase)
 
+                    # Human review at HUMAN_REVIEW — send full output for review
+                    # Use the same data source as CLI: the full graph state artifacts
+                    # (which accumulates DEFINE + HUMAN_REVIEW outputs)
+                    if phase == "HUMAN_REVIEW":
+                        # Merge phase state + live chunk artifacts to match CLI state
+                        merged = dict(self.phase_states.get("DEFINE", {}).get("artifacts", {}))
+                        merged.update(artifacts)
+                        await self._send_review(phase, {"artifacts": merged, "metrics": chunk.get("metrics", {})})
+
                 else:
                     ev = self.add_event(phase, "progress", f"{phase} processing...")
                     await self.broadcast(ev)
-
-                # HIL gate — executor already cleared human_approval_required when auto_approve=True
-                if chunk.get("human_approval_required") and phase in self.HIL_PHASES:
-                    if not effective_auto_approve:
-                        await self._wait_for_user_input(phase)
 
             # Mark final phase as completed
             if self._last_phase:

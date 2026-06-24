@@ -13,7 +13,8 @@ END_MARKER = END
 # Forward paths for forced progression after max retries (prevents livelock).
 _forward_paths = {
     "DISCOVER": "DEFINE",
-    "DEFINE": "PLAN",
+    "DEFINE": "HUMAN_REVIEW",
+    "HUMAN_REVIEW": "PLAN",
     "PLAN": "BUILD",
     "BUILD": "SEED_DATA",
     "SEED_DATA": "VERIFY",
@@ -37,9 +38,27 @@ def route_phase(state: WorkflowState) -> str:
     """
     Route to the next phase based on current phase and metrics.
     Implements quality gates that can loop back to earlier phases.
+    Also handles HIL gating — clears the flag and routes forward.
     Loop counts live in state to avoid cross-cycle bleed.
     """
     phase = state["phase"]
+
+    # HIL gating: only HUMAN_REVIEW has special HIL handling
+    # Other phases proceed to quality gate checks below
+    if phase == "HUMAN_REVIEW":
+        if not state.get("human_approval_required"):
+            user_input = state.get("artifacts", {}).get("user_input", {})
+            section_feedback = state.get("artifacts", {}).get("human_review_feedback", {})
+            if section_feedback:
+                any_rejected = any(not v.get("approved") for v in section_feedback.values())
+                if any_rejected:
+                    return "DEFINE"
+            elif user_input and not user_input.get("approved"):
+                return "DEFINE"
+            return "PLAN"
+        # HIL still pending — wait for executor to update state
+        return "HUMAN_REVIEW"
+
     m = state["metrics"]
     error = state.get("error")
 
@@ -52,6 +71,10 @@ def route_phase(state: WorkflowState) -> str:
     # If there's an error AND no more retries available, end the workflow
     if error and loop_count >= 2:
         return END
+
+    # DISCOVER -> always forward to DEFINE (no quality gate needed)
+    if phase == "DISCOVER":
+        return "DEFINE"
 
     # Load thresholds from guardrails (REFLECT can update between cycles)
     min_spec_conf = get_threshold("min_spec_confidence")
