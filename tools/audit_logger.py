@@ -15,7 +15,8 @@ from log.logging import setup_logger, log_event
 
 logger = setup_logger("audit")
 
-AUDIT_DIR = Path(os.getenv("AUDIT_LOG_DIR", "build/audit_logs"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+AUDIT_DIR = PROJECT_ROOT / "build" / "audit_logs"
 INTERACTION_LOG = AUDIT_DIR / "interactions.jsonl"
 
 

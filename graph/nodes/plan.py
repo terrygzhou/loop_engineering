@@ -59,7 +59,7 @@ def _estimate_arch_uncertainty(artifacts: dict) -> float:
 
     if len(plan_text) > 200:
         score -= 0.15
-    task_items = tasks_text.count("- [") + tasks_text.count("1.") + tasks_text.count("2.") + tasks_text.count("3.")
+    task_items = len(re.findall(r'^\s*[-*]\s*[\-\[]', tasks_text, re.MULTILINE)) + len(re.findall(r'^\s*\d+\.\s', tasks_text, re.MULTILINE))
     if task_items >= 5:
         score -= 0.15
     elif task_items >= 1:
