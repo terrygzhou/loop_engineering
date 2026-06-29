@@ -82,7 +82,7 @@ class AuditLog:
         return self._log("node.output", {
             "phase": phase,
             "output_keys": list(outputs.keys()),
-            "output_summary": {k: f"{type(v).__name__}({len(str(v))})" for k, v in outputs.items()},
+            "output_summary": {k: (str(v) if isinstance(v, (int, float)) else f"{type(v).__name__}({len(str(v))})") for k, v in outputs.items()},
         })
 
     def log_node_transition(self, from_phase: str, to_phase: str, reason: str = "") -> dict:

@@ -34,7 +34,9 @@ def _load_feedback_context(state: dict) -> str:
         parts.append("\n== End Historical Lessons ==")
         return "\n".join(parts)
     except Exception as e:
-        print(f"  ⚠ Could not load historical feedback: {e}")
+        import os
+        if os.environ.get("CHROMA_URL"):
+            print(f"  ⚠ Could not load historical feedback: {e}")
         return ""
 
 
