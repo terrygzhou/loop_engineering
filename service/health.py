@@ -4,6 +4,7 @@ Health check and metrics endpoint for the orchestrator.
 Provides HTTP endpoints for Docker health checks and Prometheus scraping.
 Runs on port 8081 (configurable via OBSERVABILITY_PORT).
 """
+import atexit
 import json
 import os
 import time
@@ -88,13 +89,26 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 def start_health_server(port: int = 0):
     """Start health server in a background thread."""
+    global health_server
     if port == 0:
         port = int(os.getenv("OBSERVABILITY_PORT", "8081"))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    health_server = server
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"[Health] Server listening on :{port}")
     return server
+
+
+def _shutdown_health_server():
+    try:
+        if 'health_server' in globals() and health_server:
+            health_server.shutdown()
+    except Exception:
+        pass
+
+
+atexit.register(_shutdown_health_server)
 
 
 def track_workflow_start(project_name: str):
