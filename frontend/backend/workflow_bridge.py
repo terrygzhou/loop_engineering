@@ -748,10 +748,16 @@ class WorkflowBridge:
 
                     self.waiting_for = None
 
-                    # Resume: send user input directly so the node's interrupt() returns it
+                    # Resume: normalize user_input to a dict for the node's interrupt() return value
                     if interrupted_phase == "DISCOVER":
-                        # Both pauses: pass user input directly as resume value
-                        resume_data = user_input
+                        # Bridge stores raw value (could be str or dict from UI)
+                        # Node's interrupt() expects dict; normalize to {key: value}
+                        if isinstance(user_input, dict):
+                            resume_data = user_input
+                        elif isinstance(user_input, str):
+                            resume_data = {"interview_notes": user_input}
+                        else:
+                            resume_data = {"interview_notes": str(user_input)}
                     elif interrupted_phase == "ARCH_REVIEW":
                         resume_data = {
                             "human_approval_required": False,
