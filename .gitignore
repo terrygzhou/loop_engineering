@@ -50,3 +50,5 @@ tests/
 # Local artifacts
 logs/
 tests/
+# Workflow output directory
+output/
