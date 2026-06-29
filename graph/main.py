@@ -56,9 +56,9 @@ def build_graph(checkpointer=None, auto_approve=False):
     workflow.add_edge("REFLECT", END)
 
     # OOTB: interrupt_after handles HIL pauses
-    # DISCOVER: interrupt() in node triggers double-pause
+    # DISCOVER: uses in-node interrupt() for double-pause (no interrupt_after needed)
     # ARCH_REVIEW: interrupt_after pauses after node returns
-    interrupt_nodes: list[str] = [] if auto_approve else ["DISCOVER", "ARCH_REVIEW"]
+    interrupt_nodes: list[str] = [] if auto_approve else ["ARCH_REVIEW"]
 
     return workflow.compile(
         checkpointer=checkpointer,
