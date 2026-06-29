@@ -1,0 +1,10 @@
+# loop_engineering configuration
+project:
+  name: loop_engineering
+  version: 1.0.0
+
+skills:
+  # When true, only load skills from ./skills/ — no fallback to ~/.hermes/skills
+  local_only: true
+  # Path to the local skills directory (relative to project root)
+  directory: ./skills
