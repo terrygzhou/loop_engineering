@@ -119,17 +119,32 @@ class OTelTracer:
 
     def record_llm_call(self, skill: str, model: str, prompt_len: int,
                         response_len: int, duration_s: float, error: Optional[str] = None):
-        """Emit a span for each LLM invocation."""
+        """Emit a span for each LLM invocation.
+
+        Uses OpenInference semantic conventions so Phoenix can extract
+        model name, token counts, and cost from standard attributes.
+        """
         if not self.is_configured():
             return
+        total_tokens = prompt_len + response_len
+        # OpenInference semantic conventions (v0.1.0+)
         span = trace.get_tracer("llm").start_span(
             "llm.invoke",
             attributes={
+                # ── OpenInference: standard attributes ──
+                "gen_ai.operation.name": "chat.completions",
+                "gen_ai.request.model": model,
+                "gen_ai.request.type": "chat",
+                "gen_ai.request.input.token_usage": prompt_len,
+                "gen_ai.response.model": model,
+                "gen_ai.response.output.token.usage": response_len,
+                "gen_ai.usage.total_tokens": total_tokens,
+                "gen_ai.usage.input_tokens": prompt_len,
+                "gen_ai.usage.output_tokens": response_len,
+                # ── Custom: skill context ──
                 "llm.skill": skill,
-                "llm.model": model,
-                "llm.prompt_len": prompt_len,
-                "llm.response_len": response_len,
                 "llm.duration_s": round(duration_s, 3),
+                "workflow.duration_s": round(duration_s, 3),
             },
         )
         if error:

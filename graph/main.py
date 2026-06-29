@@ -1,8 +1,11 @@
 """
 Graph compilation: wire up the LangGraph workflow with all nodes and edges.
+
+Uses LangGraph OOTB APIs:
+- interrupt_after=["DISCOVER", "ARCH_REVIEW"] for HIL pauses
+- SQLiteSaver for checkpoint persistence
 """
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
 
 from graph.state import WorkflowState
 from graph.nodes.discover import discover_node
@@ -23,11 +26,9 @@ def build_graph(checkpointer=None, auto_approve=False):
 
     Flow: DISCOVER -> DEFINE -> PLAN -> ARCH_REVIEW -> BUILD
          -> SEED_DATA -> VERIFY -> SHIP -> REFLECT -> END
-    With conditional routing for quality gates.
 
-    PLAN generates: specification, implementation plan, tasks, and architecture diagrams.
-    ARCH_REVIEW pauses for user review of all Plan outputs before BUILD.
-    Single HIL node (interrupt_after): ARCH_REVIEW (skipped when auto_approve=True)
+    OOTB HIL: interrupt_after handles DISCOVER + ARCH_REVIEW pauses.
+    DISCOVER uses interrupt() for double-pause (project setup + interview).
     """
     workflow = StateGraph(WorkflowState)
 
@@ -46,27 +47,19 @@ def build_graph(checkpointer=None, auto_approve=False):
     workflow.add_edge(START, "DISCOVER")
     workflow.add_edge("DISCOVER", "DEFINE")
     workflow.add_edge("DEFINE", "PLAN")
-
-    # PLAN -> ARCH_REVIEW (PLAN generates all outputs including diagrams)
     workflow.add_edge("PLAN", "ARCH_REVIEW")
-
-    # ARCH_REVIEW -> conditional: approve → BUILD, reject → DEFINE
     workflow.add_conditional_edges("ARCH_REVIEW", route_phase)
-
-    # Conditional routing with quality gates
     workflow.add_conditional_edges("BUILD", route_phase)
     workflow.add_conditional_edges("SEED_DATA", route_phase)
     workflow.add_conditional_edges("VERIFY", route_phase)
-
-    # SHIP -> always reflect
     workflow.add_edge("SHIP", "REFLECT")
-
-    # REFLECT -> END
     workflow.add_edge("REFLECT", END)
 
-    # DISCOVER raises its own GraphInterrupt mid-node — don't list it in interrupt_after.
-    # Only ARCH_REVIEW needs interrupt_after because it raises GraphInterrupt at the end.
-    interrupt_nodes: list[str] = [] if auto_approve else ["ARCH_REVIEW"]
+    # OOTB: interrupt_after handles HIL pauses
+    # DISCOVER: interrupt() in node triggers double-pause
+    # ARCH_REVIEW: interrupt_after pauses after node returns
+    interrupt_nodes: list[str] = [] if auto_approve else ["DISCOVER", "ARCH_REVIEW"]
+
     return workflow.compile(
         checkpointer=checkpointer,
         interrupt_after=interrupt_nodes,

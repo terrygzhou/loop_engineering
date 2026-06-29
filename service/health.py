@@ -137,3 +137,9 @@ def track_llm(skill: str, duration: float, success: bool = True):
 
 def set_current_phase(project_name: str, phase: str):
     WORKFLOW_PHASE.labels(project=project_name).set(1)
+
+
+if __name__ == "__main__":
+    import signal
+    start_health_server()
+    signal.pause()

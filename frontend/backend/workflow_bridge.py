@@ -101,12 +101,18 @@ class WorkflowBridge:
 
     # Phases in order
     PHASES = [
-        "DISCOVER", "DEFINE", "HUMAN_REVIEW", "PLAN", "BUILD",
+        "DISCOVER", "DEFINE", "PLAN", "BUILD",
         "SEED_DATA", "VERIFY", "SHIP", "REFLECT",
     ]
 
     # Phases where we wait for user input
-    HIL_PHASES = {"HUMAN_REVIEW", "PLAN", "VERIFY"}
+    HIL_PHASES = {"DISCOVER", "PLAN", "VERIFY"}
+
+    # Orchestrator state file path (shared via Docker volume) — legacy, kept for backward compat
+    ORCHESTRATOR_STATE_DIR = Path("/app/build")
+
+    # SQLite checkpoint DB path (matches executor's _get_checkpointer default)
+    CHECKPOINT_DB = Path("/app/build/checkpoints.db")
 
     def __init__(self):
         self.status = "idle"
@@ -142,6 +148,105 @@ class WorkflowBridge:
                 "artifacts": {},
                 "messages": [],
             }
+
+    def _load_checkpoint_status(self) -> Dict[str, Any]:
+        """Read workflow state from the SQLite checkpoint DB.
+
+        Returns a dict with keys matching WorkflowResponse shape:
+        status, phase, cycle, phases, waiting_for, messages, project_name.
+        Returns empty dict if checkpoint DB is unavailable.
+        """
+        import sqlite3
+
+        db_path = os.environ.get("CHECKPOINT_DB", str(self.CHECKPOINT_DB))
+
+        if not os.path.exists(db_path):
+            return {}
+
+        try:
+            conn = sqlite3.connect(db_path, uri=True)
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(
+                "SELECT blob FROM checkpoints ORDER BY rowid DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+            conn.close()
+        except (sqlite3.OperationalError, OSError):
+            return {}
+
+        if row is None:
+            return {}
+
+        try:
+            import msgpack
+            blob = msgpack.loads(row["blob"], strict_map_key=False)
+        except Exception:
+            return {}
+
+        # LangGraph checkpoint structure:
+        # blob is a dict with keys: v, id, ts, channel, channel_versions, metadata, current, next
+        # 'channel' maps channel names → values
+        channel = blob.get("channel", {})
+
+        # Channels are stored as dicts keyed by channel name
+        # The 'phase' channel holds current phase name
+        # The '__input__' channel holds the initial state
+        phase = None
+        project_name = ""
+        error = None
+        cycle = "1"
+
+        # Extract state from channels
+        for ch_name, ch_val in channel.items():
+            if ch_name == "phase":
+                phase = ch_val
+            elif isinstance(ch_val, dict):
+                if "phase" in ch_val:
+                    phase = ch_val.get("phase")
+                if "project_name" in ch_val:
+                    project_name = ch_val.get("project_name", "")
+                if "error" in ch_val:
+                    error = ch_val.get("error")
+                if "cycle_id" in ch_val:
+                    cycle = ch_val.get("cycle_id", "1")
+
+        if not phase:
+            phase = self.PHASES[0]  # default to DISCOVER
+
+        if error:
+            overall_status = "error"
+        elif phase in self.PHASES:
+            overall_status = "running"
+        else:
+            overall_status = "idle"
+
+        # Build phase states
+        phases = []
+        for p in self.PHASES:
+            phases.append({
+                "phase": p,
+                "status": "pending",
+                "started_at": None,
+                "completed_at": None,
+                "artifacts": {},
+                "messages": [],
+            })
+
+        phase_idx = self.PHASES.index(phase) if phase in self.PHASES else 0
+        for i in range(phase_idx):
+            phases[i]["status"] = "complete"
+        phases[phase_idx]["status"] = "running"
+
+        return {
+            "status": overall_status,
+            "phase": phase,
+            "cycle": int(cycle) if isinstance(cycle, str) and cycle.isdigit() else cycle,
+            "phases": phases,
+            "waiting_for": None,
+            "messages": [],
+            "project_name": project_name,
+            "error": error,
+        }
 
     def _try_import_real(self):
         """Attempt to import the real workflow modules."""
@@ -314,6 +419,10 @@ class WorkflowBridge:
         _spec = importlib.util.spec_from_file_location("review_contract", _rc_path)
         _mod = importlib.util.module_from_spec(_spec)
         _spec.loader.exec_module(_mod)
+        # CRITICAL: Register in sys.modules so dataclass serialization (Pydantic/msgpack)
+        # can find cls.__module__ → sys.modules[module] → __dict__ for field introspection.
+        # Without this, SectionFeedback raises AttributeError: 'NoneType' has no '__dict__'.
+        sys.modules["review_contract"] = _mod
         build_review_sections = _mod.build_review_sections
         build_review_summary = _mod.build_review_summary
         build_review_metrics = _mod.build_review_metrics
@@ -435,17 +544,9 @@ class WorkflowBridge:
                     "- Deployment: Docker Compose"
                 )
 
-            # HIL at HUMAN_REVIEW: present full spec/artifacts for review before PLAN
-            # Use DEFINE phase artifacts (spec_refined, api_contract, interview_notes)
-            if phase == "HUMAN_REVIEW":
-                define_state = self.phase_states.get("DEFINE", {"artifacts": {}, "metrics": None})
-                await self._send_review(phase, define_state)
-                await self._wait_for_user_input(phase)
-
-            # HIL at PLAN / VERIFY
-            if phase in ("PLAN", "VERIFY"):
-                await self._wait_for_user_input(phase)
-
+            # Skill-driven interview at DEFINE (not DISCOVER — already handled in on_hil_bridge)
+            if phase == "DEFINE":
+                await self._send_interview(phase)
             if not self._aborted:
                 ev = self.add_event(phase, "completed", f"{phase} phase completed successfully")
                 await self.broadcast(ev)
@@ -459,11 +560,14 @@ class WorkflowBridge:
             await self.broadcast(ev)
 
     async def run_real(self):
-        """Run the actual LangGraph workflow with streaming.
+        """Run the actual LangGraph workflow with OOTB interrupt/resume.
 
-        Uses the shared WorkflowRunner from graph.executor — identical graph
-        and state as main.py. The bridge only adds WebSocket event streaming
-        and HIL (Human-In-The-Loop) handling via the UI.
+        Uses LangGraph native interrupt() + Command(resume=...) pattern:
+        1. graph.stream() for normal execution
+        2. GraphInterrupt caught → UI polling for input → Command(resume=...)
+        3. Repeat until workflow completes
+
+        Replaces custom _astream_with_hil() with OOTB pattern.
         """
         if not self._use_real_workflow:
             print("[Bridge] Real workflow unavailable — falling back to simulated")
@@ -480,8 +584,15 @@ class WorkflowBridge:
         self._last_phase = None
 
         # ── Use shared executor for graph + state (same as CLI) ──
-        from graph.executor import WorkflowRunner
-        runner = WorkflowRunner()
+        from graph.executor import WorkflowRunner, _get_checkpointer
+        from langgraph.errors import GraphInterrupt
+        from langgraph.types import Command
+        import uuid as _uuid
+
+        # Fresh checkpointer for this run
+        checkpointer = _get_checkpointer()
+        thread_id = str(_uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
 
         # Build state via shared executor — guarantees identical state for both modes
         state = self._build_executor_state(
@@ -506,102 +617,154 @@ class WorkflowBridge:
             self._last_phase = None
 
         try:
-            # Stream events from LangGraph — each iteration is a node execution
-            async def on_hil_bridge(phase, chunk):
-                """Bridge HIL handler — wait for user input at HIL gates.
+            # ── OOTB interrupt/resume loop ──
+            from graph.main import build_graph
+            graph = build_graph(checkpointer=checkpointer, auto_approve=self._auto_approve)
 
-                Auto-approve when no WS clients connected (headless).
-                When WS clients are connected, wait up to 30 min for user input.
-                """
-                has_clients = bool(self.websocket_clients)
-
-                if not has_clients:
-                    print(f"  → Auto-approved {phase} (no WS clients)")
-                    return {"approved": True}
-
-                # Wait for user input — poll every second, timeout 30 min
-                self.status = "waiting"
-                self.waiting_for = phase
-                ev = self.add_event(phase, "waiting", f"Waiting for user input — {phase} phase", {"type": "review_approval"})
-                await self.broadcast(ev)
-
-                for _ in range(1800):
-                    await asyncio.sleep(1)
-                    if phase in self.user_inputs:
-                        inp = self.user_inputs.pop(phase)
-                        self.waiting_for = None
-                        ev = self.add_event(phase, "progress", "User input received")
-                        await self.broadcast(ev)
-                        return inp or {"approved": True}
-
-                # Timeout — auto-approve
-                self.waiting_for = None
-                ev = self.add_event(phase, "progress", f"{phase} auto-approved (timeout)")
-                await self.broadcast(ev)
-                return {"approved": True}
-
-            async for chunk in runner._astream_with_hil(state, self._auto_approve, on_hil_bridge):
+            input_state = state
+            while True:
                 if self._aborted:
                     break
 
-                phase = chunk.get("phase", "UNKNOWN")
-                artifacts = chunk.get("artifacts", {})
+                try:
+                    # Stream execution until interrupt or completion
+                    async for chunk in graph.stream(input_state, stream_mode="values", config=config):
+                        if self._aborted:
+                            break
 
-                # Capture artifacts into phase state
-                if artifacts and phase in self.phase_states:
-                    self.phase_states[phase]["artifacts"].update(artifacts)
+                        phase = chunk.get("phase", "UNKNOWN")
+                        artifacts = chunk.get("artifacts", {})
 
-                # Deduplicate: only log artifacts that are new or have changed
-                for artifact_name, artifact_value in artifacts.items():
-                    artifact_key = f"{phase}:{artifact_name}"
-                    if artifact_key not in self._seen_artifacts or self._seen_artifacts[artifact_key] != artifact_value:
-                        self._seen_artifacts[artifact_key] = artifact_value
-                        ev = self.add_event(phase, "artifact", f"{artifact_name}: {str(artifact_value)[:200]}", {
-                            "artifact_name": artifact_name,
-                            "artifact_value": artifact_value,
-                        })
-                        await self.broadcast(ev)
+                        # Capture artifacts
+                        if artifacts and phase in self.phase_states:
+                            self.phase_states[phase]["artifacts"].update(artifacts)
 
-                # Detect new phase entry
-                if phase != self._last_phase:
-                    if self._last_phase is not None:
+                        # Deduplicate artifact events
+                        for artifact_name, artifact_value in artifacts.items():
+                            artifact_key = f"{phase}:{artifact_name}"
+                            if artifact_key not in self._seen_artifacts or self._seen_artifacts[artifact_key] != artifact_value:
+                                self._seen_artifacts[artifact_key] = artifact_value
+                                ev = self.add_event(phase, "artifact", f"{artifact_name}: {str(artifact_value)[:200]}", {
+                                    "artifact_name": artifact_name,
+                                    "artifact_value": artifact_value,
+                                })
+                                await self.broadcast(ev)
+
+                        # Detect phase transitions
+                        if phase != self._last_phase:
+                            if self._last_phase is not None:
+                                ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
+                                await self.broadcast(ev)
+                            self.current_phase = phase
+                            ev = self.add_event(phase, "started", f"Entering {phase} phase")
+                            await self.broadcast(ev)
+                            self._last_phase = phase
+
+                            # Skill-driven interview at DEFINE
+                            if phase == "DEFINE":
+                                await self._send_interview(phase)
+                        else:
+                            ev = self.add_event(phase, "progress", f"{phase} processing...")
+                            await self.broadcast(ev)
+
+                    # Normal completion (stream ended without GraphInterrupt)
+                    if self._last_phase:
                         ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
                         await self.broadcast(ev)
+                    break
 
-                    self.current_phase = phase
-                    ev = self.add_event(phase, "started", f"Entering {phase} phase")
-                    await self.broadcast(ev)
-                    self._last_phase = phase
+                except GraphInterrupt as e:
+                    # OOTB: LangGraph interrupted via interrupt() in the node
+                    print(f"  → GraphInterrupt: {e}")
+                    graph_state = await graph.aget_state(config)
 
-                    # Skill-driven interview at DEFINE — executor already injected user_input
-                    if phase == "DEFINE":
-                        await self._send_interview(phase)
+                    # Check if this is a true suspension or normal end
+                    if not graph_state.next:
+                        if self._last_phase:
+                            ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
+                            await self.broadcast(ev)
+                        break
 
-                    # Human review at HUMAN_REVIEW — send full output for review
-                    # Use the same data source as CLI: the full graph state artifacts
-                    # (which accumulates DEFINE + HUMAN_REVIEW outputs)
-                    if phase == "HUMAN_REVIEW":
-                        # Merge phase state + live chunk artifacts to match CLI state
-                        merged = dict(self.phase_states.get("DEFINE", {}).get("artifacts", {}))
-                        merged.update(artifacts)
-                        await self._send_review(phase, {"artifacts": merged, "metrics": chunk.get("metrics", {})})
+                    # Determine interrupted phase
+                    current_chunk = graph_state.values or {}
+                    interrupted_phase = (
+                        current_chunk.get("phase")
+                        or current_chunk.get("next_phase")
+                        or self._last_phase
+                        or "UNKNOWN"
+                    )
 
-                else:
-                    ev = self.add_event(phase, "progress", f"{phase} processing...")
-                    await self.broadcast(ev)
+                    # ── Wait for user input (bridge layer) ──
+                    self.status = "waiting"
+                    self.waiting_for = interrupted_phase
 
-            # Mark final phase as completed (only if NOT aborted)
-            if self._aborted:
-                self.status = "idle"
-                self.current_phase = ""
-                self.waiting_for = None
-                ev = self.add_event("SYSTEM", "error", f"Cycle {self.cycle} aborted by user")
-                await self.broadcast(ev)
-            else:
-                if self._last_phase:
-                    ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
-                    await self.broadcast(ev)
+                    # Send interview questions for DISCOVER
+                    if interrupted_phase == "DISCOVER":
+                        await self._send_interview(interrupted_phase)
+                    else:
+                        ev = self.add_event(interrupted_phase, "waiting", f"Waiting for user input — {interrupted_phase}", {"type": "review_approval"})
+                        await self.broadcast(ev)
 
+                    # Poll for user input (up to 30 min)
+                    user_input = None
+                    for _ in range(1800):
+                        if self._aborted:
+                            break
+                        await asyncio.sleep(1)
+                        if interrupted_phase in self.user_inputs:
+                            user_input = self.user_inputs.pop(interrupted_phase)
+                            ev = self.add_event(interrupted_phase, "progress", "User input received")
+                            await self.broadcast(ev)
+                            break
+
+                    if self._aborted:
+                        break
+
+                    if user_input is None:
+                        # Timeout — auto-approve
+                        user_input = {"approved": True, "interview_notes": ""}
+                        ev = self.add_event(interrupted_phase, "progress", f"{interrupted_phase} auto-approved (timeout)")
+                        await self.broadcast(ev)
+
+                    self.waiting_for = None
+
+                    # Build resume payload
+                    if interrupted_phase == "DISCOVER":
+                        notes = user_input
+                        if isinstance(user_input, dict):
+                            notes = user_input.get("interview_notes") or user_input.get("raw_input") or ""
+                        existing = (current_chunk.get("artifacts") or {}).copy()
+                        existing["user_input"] = user_input
+                        existing["interview_notes"] = notes
+                        existing["discover_interview_done"] = True
+                        existing["discover_hil_count"] = existing.get("discover_hil_count", 0) + 1
+                        resume_data = {
+                            "human_approval_required": False,
+                            "interview_notes": notes or "",
+                            "discover_interview_done": True,
+                            "artifacts": existing,
+                        }
+                        if isinstance(user_input, dict):
+                            if user_input.get("project_name"):
+                                resume_data["project_name"] = user_input["project_name"]
+                            if user_input.get("project_description"):
+                                resume_data["project_description"] = user_input["project_description"]
+                    elif interrupted_phase == "ARCH_REVIEW":
+                        resume_data = {
+                            "human_approval_required": False,
+                            "arch_review_approved": True,
+                            "diagram_status": "approved",
+                        }
+                    else:
+                        resume_data = {"human_approval_required": False}
+
+                    # OOTB: resume with Command(resume=...)
+                    print(f"  → Resuming {interrupted_phase} with Command(resume=...)")
+                    input_state = Command(resume=resume_data)
+                    continue
+
+            # Mark workflow complete
+            if not self._aborted:
                 self.status = "complete"
                 self.current_phase = ""
                 self.waiting_for = None
@@ -609,7 +772,6 @@ class WorkflowBridge:
                 await self.broadcast(ev)
 
         except asyncio.CancelledError:
-            # Workflow was cancelled via abort() — clean exit, don't mark as error
             self.status = "idle"
             self.current_phase = ""
             self.waiting_for = None

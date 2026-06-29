@@ -83,14 +83,44 @@ async def serve_frontend():
 
 @app.get("/api/status")
 async def get_status():
-    """Get current workflow status."""
+    """Get current workflow status.
+
+    Priority:
+    1. Local bridge state (if a workflow is running via the UI)
+    2. Orchestrator persisted state (shared volume from orchestrator container)
+    3. Idle fallback
+    """
+    # If local bridge is actively running, use its state
+    if bridge.status in ("running", "waiting"):
+        return WorkflowResponse(
+            status=bridge.status,
+            phase=bridge.current_phase,
+            cycle=bridge.cycle,
+            phases=list(bridge.phase_states.values()),
+            waiting_for=bridge.waiting_for,
+            messages=bridge.events[-50:],
+        )
+
+    # Fall back to checkpoint DB (SQLite)
+    orch = bridge._load_checkpoint_status()
+    if orch:
+        return WorkflowResponse(
+            status=orch["status"],
+            phase=orch["phase"],
+            cycle=int(orch["cycle"]) if isinstance(orch["cycle"], str) else orch["cycle"],
+            phases=orch["phases"],
+            waiting_for=orch.get("waiting_for"),
+            messages=orch.get("messages", []),
+        )
+
+    # Idle fallback
     return WorkflowResponse(
-        status=bridge.status,
-        phase=bridge.current_phase,
-        cycle=bridge.cycle,
+        status="idle",
+        phase="",
+        cycle=0,
         phases=list(bridge.phase_states.values()),
-        waiting_for=bridge.waiting_for,
-        messages=bridge.events[-50:],
+        waiting_for=None,
+        messages=[],
     )
 
 

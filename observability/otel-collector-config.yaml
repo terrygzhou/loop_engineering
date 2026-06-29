@@ -30,6 +30,10 @@ exporters:
   debug:
     verbosity: detailed
 
+# NOTE: Phoenix Docker image serves OTLP on port 6006 (same as UI).
+# Unlike standard OTLP ports (4317/4318), Phoenix does NOT expose those.
+# The endpoint above is correct. Do not change to 4317/4318.
+
 service:
   pipelines:
     traces:

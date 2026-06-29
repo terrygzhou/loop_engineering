@@ -1,6 +1,6 @@
 paths:
   project_name: test_discover_fix
-  workspace_dir: ~/workspace/projects
+  workspace_dir: ./output
   project_path: '{{project_name}}'
   skills_dir: skills
   storage_dir: ./storage
