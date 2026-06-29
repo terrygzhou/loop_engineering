@@ -208,6 +208,26 @@ function handleProgressEvent(event) {
     return;
   }
 
+  // Handle workflow abort/error — reset to idle
+  if (event.phase === 'SYSTEM' && event.action === 'error') {
+    state.interviewActive = false;
+    state.workflow.status = 'idle';
+    // Reset phase states back to pending
+    for (const phaseName in state.phases) {
+      state.phases[phaseName] = {
+        ...state.phases[phaseName],
+        status: 'pending',
+        artifacts: {},
+        messages: [],
+      };
+    }
+    // Clear artifact dedup cache and log counter so re-run regenerates display
+    state.shownArtifacts = {};
+    state.lastRenderedMsgCount = 0;
+    renderAll();
+    return;
+  }
+
   // Handle skill-driven interview
   if (event.action === 'interview' && event.data && event.data.questions) {
     renderInterview(event.phase, event.data.questions);

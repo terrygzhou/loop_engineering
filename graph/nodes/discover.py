@@ -37,73 +37,98 @@ def discover_node(state: dict) -> dict:
       - state["artifacts"]["project_context"]: JSON context
       - state["interview_notes"]: Collected interview answers
     """
-    print("\n=== DISCOVER PHASE ===")
+    # Set phase immediately so executor can identify us on GraphInterrupt
+    state["phase"] = "DISCOVER"
+    state["next_phase"] = "DEFINE"
 
-    # ── Step 0: Extract inputs ──
-    project_name = state.get("project_name", "project")
+    # ── Step 0: Extract and validate required inputs ──
+    # DISCOVER is strictly human-in-the-loop: project_name, project_description,
+    # and interview answers MUST all come from the user.
+    project_name = state.get("project_name", "")
     project_description = state.get("project_description", "")
     context_folder = state.get("context_folder", "")
     project_folder = state.get("project_folder", "")
 
-    # Derive project_folder from project_name if not set
-    if not project_folder:
-        workspace = os.getenv("WORKSPACE_DIR", os.path.expanduser("~/workspace/projects"))
-        project_folder = os.path.join(workspace, project_name)
-        state["project_folder"] = project_folder
-
-    state["project_path"] = project_folder
-    state["project_name"] = project_name
-
-    # ── Step 0.5: Improve mode — connect to a previously deployed product ──
-    # When --improve is set, load storage/live.json, health-check the product,
-    # and use its project path as context. This bridges factory → product.
-    improve_mode = state.get("improve_mode", False)
-    if improve_mode:
+    # ── Step 0.5: Improve mode — load telemetry for context only ──
+    # Telemetry provides context_folder, but DOES NOT bypass the human interview.
+    # The user still confirms/updates name, description, and interview answers.
+    if state.get("improve_mode"):
         telemetry = _load_improve_telemetry(state, project_name)
         if telemetry:
-            print(f"  → Improve mode: connected to {telemetry.get('product_url', '?')}")
-            # Point both context_folder and project_folder at the deployed project
             deployed_path = telemetry["project_path"]
-            state["context_folder"] = deployed_path
-            state["project_folder"] = deployed_path
-            state["project_path"] = deployed_path
+            context_folder = deployed_path
             project_folder = deployed_path
-            # Store telemetry for downstream nodes
+            state["context_folder"] = deployed_path
             state.setdefault("artifacts", {})["improve_telemetry"] = json.dumps(telemetry, indent=2)
-            # Bypass interview — generate notes from existing deployment
-            interview_notes = _generate_improve_interview_notes(state, telemetry)
-            state["interview_notes"] = interview_notes
-            state.setdefault("artifacts", {})["interview_notes"] = interview_notes
+            # NOTE: improve_mode does NOT bypass human interview — user still provides input
         else:
             print("  ⚠ improve_mode: live.json not found or product unreachable — falling back to standard DISCOVER")
 
-    # ── Step 1: Check if we've already collected interview (resume detection) ──
-    # When auto_approve=True: skip GraphInterrupt entirely (executor loops forever on it)
-    # On resume from interrupt: discover_interview_done flag is set by executor
-    auto = os.getenv("AUTO_APPROVE", "").lower() in ("true", "1", "yes")
-    interrupted = state.get("artifacts", {}).get("discover_interview_done", False)
-    existing_notes = state.get("interview_notes") or state.get("artifacts", {}).get("interview_notes")
-    # BUG-FIX: Check auto-approve via state flag as fallback (env var may not persist)
-    auto_approved = state.get("arch_review_approved", False) or state.get("auto_approve", False)
-    if not auto and not interrupted and not existing_notes and not auto_approved:
-        # First run, interactive mode — pause for user input
+    # ── Step 0.6: Auto-approve mode detection ──
+    # When AUTO_APPROVE is set (Docker headless mode), skip the HIL interview
+    # and generate default interview notes from the project description/spec.
+    auto_approve = os.getenv("AUTO_APPROVE", "").lower() in ("true", "1", "yes")
+
+    # ── Step 1: Validate required human inputs ──
+    # project_name and project_description MUST be provided by the user.
+    # On resume from a prior interrupt (discover_interview_done=True), the executor
+    # stores these at state top level, so this check passes and we fall through to
+    # the resume detection below. The guard on discover_interview_done prevents a
+    # re-interrupt when the executor hasn't yet populated top-level fields.
+    # Auto-approve mode also bypasses this check (Docker headless).
+    if (not project_name or not project_description) and not state.get("discover_interview_done") and not auto_approve:
         raise GraphInterrupt(
             interrupts=[
                 {
                     "type": "discover_interview",
                     "phase": "DISCOVER",
-                    "message": "Interview: answer requirements questions for this project",
+                    "message": "Interview: provide project name, description, and requirements answers",
                 }
             ]
         )
 
-    # If no interview notes yet (auto_approve path), generate defaults
-    if not existing_notes:
-        interview_notes = _auto_generate_interview_notes(project_name, project_description)
-    else:
-        interview_notes = existing_notes
+    # ── Step 2: Check if we've already collected interview (resume detection) ──
+    # State changes BEFORE GraphInterrupt are LOST (exception unwinds). So the node
+    # cannot rely on flags it sets before raising. Instead, the executor sets these
+    # flags via aupdate_state AFTER catching GraphInterrupt. On resume, they'll be
+    # present in the restored state.
+    #
+    # DISCOVER is strictly human-in-the-loop (except auto-approve mode).
+    # Resume detection: executor sets discover_interview_done after user submits.
+    artifacts = state.get("artifacts", {})
+    interrupted = state.get("discover_interview_done", False) or artifacts.get("discover_interview_done", False)
+    existing_notes = state.get("interview_notes") or artifacts.get("interview_notes")
+
+    if not interrupted and not existing_notes:
+        if auto_approve:
+            # Generate default interview notes from project description/spec
+            interview_notes = _auto_generate_interview_notes(project_name, project_description)
+            state["interview_notes"] = interview_notes
+            state.setdefault("artifacts", {})["interview_notes"] = interview_notes
+            print(f"  → Auto-approve mode: generated default interview notes for '{project_name}'")
+        else:
+            raise GraphInterrupt(
+                interrupts=[
+                    {
+                        "type": "discover_interview",
+                        "phase": "DISCOVER",
+                        "message": "Interview: answer requirements questions for this project",
+                    }
+                ]
+            )
+
+    # Resume: interview_notes must exist (set by executor after user submits)
+    interview_notes = existing_notes
     state["interview_notes"] = interview_notes
     state.setdefault("artifacts", {})["interview_notes"] = interview_notes
+
+    # ── Step 1.5: Derive project_folder from project_name if not already set ──
+    # project_name is guaranteed non-empty here (resume or initial validation passed).
+    if not project_folder:
+        workspace = os.getenv("WORKSPACE_DIR", os.path.expanduser("~/workspace/projects"))
+        project_folder = os.path.join(workspace, project_name)
+        state["project_folder"] = project_folder
+    state["project_path"] = project_folder
 
     # ── Step 2: Scan existing codebase (if context provided) ──
     project_dir = Path(project_folder)
@@ -122,6 +147,11 @@ def discover_node(state: dict) -> dict:
 
     context = _scan_codebase(context_folder, project_name, project_folder)
 
+    # Memory check before LLM call
+    import resource as _res
+    mem_mb = _res.getrusage(_res.RUSAGE_SELF).ru_maxrss / 1024  # KB → MB
+    print(f"  → Memory before LLM: {mem_mb:.0f} MB")
+
     # ── Step 3: Generate discovery artifact via Fabric prompt ──
     requirement_md = _generate_requirement_via_fabric(
         project_name=project_name,
@@ -129,7 +159,6 @@ def discover_node(state: dict) -> dict:
         interview_notes=interview_notes,
         context=context,
         project_folder=project_folder,
-        state=state,
     )
 
     # Write requirement.md
@@ -196,16 +225,13 @@ def _scan_codebase(context_folder: str, project_name: str, project_folder: str) 
 
 def _generate_requirement_via_fabric(project_name: str, project_description: str,
                                      interview_notes: str, context: dict,
-                                     project_folder: str, state: dict) -> str:
+                                     project_folder: str) -> str:
     """
     Use Fabric prompt skill to generate structured requirement.md.
     If Fabric skill is not available, fall back to template generation.
     """
-    skills = state.get("artifacts", {}).get("skill_registry")
-    if skills is None:
-        skills = build_skill_registry(os.getenv("SKILLS_DIR", "~/.hermes/skills"))
-        state.setdefault("artifacts", {})["skill_registry"] = skills
-
+    # Build skill registry lazily — never cache in state (prevents checkpoint bloat)
+    skills = build_skill_registry(os.getenv("SKILLS_DIR", "~/.hermes/skills"))
     fabric_skill = skills.get("Fabric Prompt Engineering", {}) or skills.get("fabric-prompt-engineering", {})
 
     if fabric_skill:
@@ -354,36 +380,8 @@ def _load_improve_telemetry(state: dict, project_name: str) -> dict | None:
         return None
 
 
-def _generate_improve_interview_notes(state: dict, telemetry: dict) -> str:
-    """Generate interview notes from a running product's telemetry."""
-    project_name = state.get("project_name", telemetry.get("project_name", "project"))
-    health_body = telemetry.get("health_body", "")
-    prev_cycle = telemetry.get("cycle_id", "?")
-    spec_from_artifacts = state.get("spec_path", "")
-
-    lines = [
-        f"Improvement cycle for '{project_name}' (previously deployed in cycle {prev_cycle}):",
-        f"Core behavior: Existing deployed application at {telemetry.get('product_url', '?')}",
-        f"Health endpoint: {telemetry.get('product_url', '')}{telemetry.get('health_endpoint', '')}",
-    ]
-    if health_body:
-        lines.append(f"Health response: {health_body[:200]}")
-    if spec_from_artifacts:
-        lines.append(f"Previous spec: {spec_from_artifacts[:200]}")
-    lines.extend([
-        f"Data model: Modify existing schema (from deployed project)",
-        f"API surface: Extend existing RESTful endpoints",
-        f"Validation: Existing validation + new requirements",
-        f"Integration: As currently deployed in project",
-        f"Deployment: Docker Compose (rolling update preferred)",
-        f"Edge cases: Precedent from deployed behavior",
-        f"Non-functional: Current performance baseline + targets",
-    ])
-    return "\n".join(lines)
-
-
 def _auto_generate_interview_notes(project_name: str, project_description: str) -> str:
-    """Generate default interview notes for auto-approve mode."""
+    """Generate default interview notes for auto-approve (Docker headless) mode."""
     return (
         f"Auto-generated interview for '{project_name}':\n"
         f"Description: {project_description}\n"
@@ -398,7 +396,7 @@ def _auto_generate_interview_notes(project_name: str, project_description: str) 
     )
 
 
-# ── Helper functions (unchanged) ──
+# ── Helper functions ──
 
 def _detect_project_type(project_path: str) -> str:
     p = Path(project_path)

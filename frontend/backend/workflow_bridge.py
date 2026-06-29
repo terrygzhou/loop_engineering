@@ -236,12 +236,16 @@ class WorkflowBridge:
             self.websocket_clients.remove(websocket)
 
     async def abort(self):
-        """Abort the running workflow and reset state."""
+        """Abort the running workflow and fully reset state.
+
+        Cancels the running task, clears phase states, events, and cached
+        artifacts so the UI returns to a clean idle state ready for a fresh start.
+        """
         if self._aborted:
             return {"status": "already_aborted"}
         self._aborted = True
 
-        # Cancel the running task
+        # Cancel the running task — this raises CancelledError inside run_real/run_simulated
         if self._run_task and not self._run_task.done():
             self._run_task.cancel()
             try:
@@ -249,15 +253,32 @@ class WorkflowBridge:
             except (asyncio.CancelledError, Exception):
                 pass
 
-        # Reset state
+        # ── Full state reset ──
         self.status = "idle"
         self.current_phase = ""
+        self.cycle = 0
         self.waiting_for = None
         self._aborted = False
+        self._run_task = None
+        self._last_phase = None
+        self._seen_artifacts = {}
+        self.user_inputs = {}
+        self.events = []
 
-        ev = self.add_event("SYSTEM", "error", "Workflow aborted by user")
+        # Reset phase tracking
+        for phase in self.PHASES:
+            self.phase_states[phase] = {
+                "phase": phase,
+                "status": "pending",
+                "started_at": None,
+                "completed_at": None,
+                "artifacts": {},
+                "messages": [],
+            }
+
+        ev = self.add_event("SYSTEM", "error", "Workflow aborted — all state reset")
         await self.broadcast(ev)
-        return {"status": "aborted"}
+        return {"status": "aborted", "cycle": self.cycle, "phases": list(self.phase_states.values())}
 
     async def _send_interview(self, phase: str):
         """Send skill-driven interview questions to the UI."""
@@ -425,14 +446,17 @@ class WorkflowBridge:
             if phase in ("PLAN", "VERIFY"):
                 await self._wait_for_user_input(phase)
 
-            ev = self.add_event(phase, "completed", f"{phase} phase completed successfully")
-            await self.broadcast(ev)
+            if not self._aborted:
+                ev = self.add_event(phase, "completed", f"{phase} phase completed successfully")
+                await self.broadcast(ev)
 
-        self.status = "complete"
-        self.current_phase = ""
-        self.waiting_for = None
-        ev = self.add_event("SYSTEM", "completed", f"Cycle {self.cycle} complete")
-        await self.broadcast(ev)
+        # After the loop — only if NOT aborted
+        if not self._aborted:
+            self.status = "complete"
+            self.current_phase = ""
+            self.waiting_for = None
+            ev = self.add_event("SYSTEM", "completed", f"Cycle {self.cycle} complete")
+            await self.broadcast(ev)
 
     async def run_real(self):
         """Run the actual LangGraph workflow with streaming.
@@ -566,17 +590,29 @@ class WorkflowBridge:
                     ev = self.add_event(phase, "progress", f"{phase} processing...")
                     await self.broadcast(ev)
 
-            # Mark final phase as completed
-            if self._last_phase:
-                ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
+            # Mark final phase as completed (only if NOT aborted)
+            if self._aborted:
+                self.status = "idle"
+                self.current_phase = ""
+                self.waiting_for = None
+                ev = self.add_event("SYSTEM", "error", f"Cycle {self.cycle} aborted by user")
+                await self.broadcast(ev)
+            else:
+                if self._last_phase:
+                    ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
+                    await self.broadcast(ev)
+
+                self.status = "complete"
+                self.current_phase = ""
+                self.waiting_for = None
+                ev = self.add_event("SYSTEM", "completed", f"Cycle {self.cycle} complete — all phases done")
                 await self.broadcast(ev)
 
-            self.status = "complete"
+        except asyncio.CancelledError:
+            # Workflow was cancelled via abort() — clean exit, don't mark as error
+            self.status = "idle"
             self.current_phase = ""
             self.waiting_for = None
-            ev = self.add_event("SYSTEM", "completed", f"Cycle {self.cycle} complete — all phases done")
-            await self.broadcast(ev)
-
         except Exception as e:
             self.status = "error"
             ev = self.add_event("SYSTEM", "error", f"Workflow failed: {str(e)[:200]}")

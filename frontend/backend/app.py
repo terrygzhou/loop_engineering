@@ -121,7 +121,13 @@ async def get_phases():
 
 @app.post("/api/start")
 async def start_workflow(req: StartRequest):
-    """Start a new workflow cycle with user requirements."""
+    """Start a new workflow cycle with user requirements.
+
+    If a workflow is already running, return an error instead of
+    starting a second one in parallel.
+    """
+    if bridge.status in ("running", "waiting"):
+        return {"status": "error", "message": "Workflow already running — abort first"}
     bridge._seen_artifacts = {}
     bridge._spec_text = req.spec
     bridge._project_name = req.project_name
@@ -138,7 +144,6 @@ async def abort_workflow():
     if bridge.status not in ("running", "waiting"):
         return {"status": "not_running"}
     result = await bridge.abort()
-    bridge.status = "idle"
     return result
 
 

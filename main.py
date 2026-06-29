@@ -41,27 +41,21 @@ def main():
     health_module.start_health_server()
     logger.info("CLI starting")
 
-    if not args.project:
-        name = input("Project name: ").strip()
-    else:
-        name = args.project
-
-    if not name:
-        logger.error("Project name is required")
-        print("✗ Project name required. Use --project NAME or answer the prompt.")
-        sys.exit(1)
-
+    # CLI arguments only — DISCOVER node collects all human input via GraphInterrupt.
+    # Do NOT use input() before the workflow: it silently blocks on non-TTY and
+    # bypasses the interview-me skill that the DISCOVER phase requires.
+    name = args.project
     spec = args.spec
-    if not spec:
-        spec = input("Brief description (or Enter to skip): ").strip()
-
     context = args.context
-    # Propagate --auto-approve to env so DISCOVER node can read it
+
+    # If no --project given, pass empty string — DISCOVER will interrupt for human input
+    if not name:
+        logger.info("No --project provided — DISCOVER will ask for project name via interview")
+        name = ""
+
+    # Propagate --auto-approve to env (but DISCOVER ignores it — always HIL)
     if args.auto_approve:
         os.environ["AUTO_APPROVE"] = "true"
-
-    if not context and not args.auto_approve:
-        context = input("Existing codebase path for discovery (or Enter for greenfield): ").strip()
 
     # ── Trace workflow lifecycle ──
     tracer.start_workflow(project_name=name, spec_text=spec)

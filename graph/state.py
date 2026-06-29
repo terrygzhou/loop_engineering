@@ -58,6 +58,7 @@ class WorkflowState(TypedDict):
 
     # ── DISCOVER: interview notes ──
     interview_notes: str                     # Collected interview answers (persists across GraphInterrupt resume)
+    discover_interview_done: bool            # Top-level flag: survives LangGraph shallow merge on resume
 
     # ── Audit trail ──
     trace_id: str                            # Correlation ID for all logs in this workflow

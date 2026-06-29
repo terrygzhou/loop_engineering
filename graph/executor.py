@@ -117,6 +117,13 @@ class WorkflowRunner:
         self.thread_id = str(_uuid.uuid4())
         self.auto_approve = auto_approve
 
+    @staticmethod
+    def _reset_memory():
+        """Clear MemorySaver checkpoint cache and force GC before a fresh workflow."""
+        import gc
+        gc.collect()
+        gc.collect()  # Double pass for circular refs
+
     def run_interactive(
         self,
         project_name: str,
@@ -126,6 +133,13 @@ class WorkflowRunner:
         improve_mode: bool = False,
     ):
         """Run the workflow synchronously with observability instrumentation."""
+        WorkflowRunner._reset_memory()
+        # Reset MemorySaver to clear stale checkpoints from previous runs
+        self.checkpointer = MemorySaver()
+        # Rebuild graph with fresh checkpointer
+        self.graph = build_graph(checkpointer=self.checkpointer, auto_approve=self.auto_approve)
+        self.thread_id = str(__import__("uuid").uuid4())
+
         cycle_id = "1"
         state = build_executor_state(
             cycle_id=cycle_id,
@@ -204,13 +218,28 @@ class WorkflowRunner:
                     break
 
                 next_nodes = graph_state.next
-                interrupted_phase = current_phase
                 current_chunk = graph_state.values or {}
+
+                # Determine interrupted phase from graph state (fallback to yielded chunk phase)
+                # This is critical: when a node raises GraphInterrupt before yielding,
+                # current_phase is None, so we MUST get the phase from checkpointed state.
+                interrupted_phase = (
+                    current_chunk.get("phase")
+                    or current_chunk.get("next_phase")
+                    or current_phase
+                )
+                # If we still can't determine phase, check if it's a DISCOVER interrupt by type
+                if not interrupted_phase and e:
+                    # GraphInterrupt message contains phase info
+                    interrupt_msg = str(e)
+                    if "DISCOVER" in interrupt_msg:
+                        interrupted_phase = "DISCOVER"
 
                 if not current_chunk:
                     print(f"  → WARNING: graph_state.values is None for phase {interrupted_phase}")
 
-                if interrupted_phase and interrupted_phase in self.HIL_PHASES:
+                # Handle HIL phases — also handle None fallback for DISCOVER
+                if interrupted_phase in self.HIL_PHASES:
                     # DISCOVER always needs HIL (interview), regardless of human_approval_required flag
                     needs_approval = (
                         interrupted_phase == "DISCOVER"
@@ -219,32 +248,29 @@ class WorkflowRunner:
 
                     if needs_approval:
                         try:
-                            # ── DISCOVER: interview gate ──
+                            # ── DISCOVER: interview gate (never auto-approve) ──
                             if interrupted_phase == "DISCOVER":
-                                if auto_approve:
-                                    print(f"  → Auto-approved {interrupted_phase}")
-                                    interview_answers = self._default_interview(graph_state.values or {})
-                                    # Set resume flag + notes so DISCOVER node doesn't loop
-                                    existing_artifacts = (current_chunk.get("artifacts") or {}).copy()
-                                    existing_artifacts["interview_notes"] = interview_answers
-                                    existing_artifacts["discover_interview_done"] = True
-                                    update = {
-                                        "human_approval_required": False,
-                                        "interview_notes": interview_answers,
-                                        "artifacts": existing_artifacts,
-                                    }
-                                else:
-                                    input_data = await on_hil(interrupted_phase, current_chunk)
-                                    update = {"human_approval_required": False}
-                                    if input_data:
-                                        # Store at top level for reliable LangGraph shallow merge
-                                        notes = input_data.get("interview_notes", "")
-                                        if notes:
-                                            update["interview_notes"] = notes
-                                        existing = (current_chunk.get("artifacts") or {}).copy()
-                                        existing["user_input"] = input_data
-                                        existing["interview_notes"] = notes
-                                        update["artifacts"] = existing
+                                # DISCOVER is strictly human-in-the-loop — no auto-approve
+                                input_data = await on_hil(interrupted_phase, current_chunk)
+                                notes = input_data.get("interview_notes", "")
+                                existing = (current_chunk.get("artifacts") or {}).copy()
+                                existing["user_input"] = input_data
+                                existing["interview_notes"] = notes
+                                existing["discover_interview_done"] = True
+                                existing["discover_hil_count"] = existing.get("discover_hil_count", 0) + 1
+                                # Persist user-provided fields at top level so the
+                                # first validation check in discover_node passes on resume.
+                                # Without this, project_name/project_description remain
+                                # empty and the node re-interrupts in an infinite loop.
+                                update = {
+                                    "human_approval_required": False,
+                                    "interview_notes": notes or "",
+                                    "discover_interview_done": True,
+                                    "project_name": input_data.get("project_name", ""),
+                                    "project_description": input_data.get("project_description", ""),
+                                    "context_folder": input_data.get("context_folder", ""),
+                                    "artifacts": existing,
+                                }
                             # ── ARCH_REVIEW: approval gate ──
                             elif interrupted_phase == "ARCH_REVIEW":
                                 if auto_approve:
@@ -310,6 +336,13 @@ class WorkflowRunner:
                         update = None
 
                     if update:
+                        # For DISCOVER: ensure discover_interview_done is set in the update
+                        # (already set above in the DISCOVER branch, but double-check)
+                        if interrupted_phase == "DISCOVER":
+                            update["discover_interview_done"] = True
+                            if "artifacts" not in update:
+                                update["artifacts"] = (current_chunk.get("artifacts") or {}).copy()
+                            update["artifacts"]["discover_interview_done"] = True
                         await self.graph.aupdate_state(config, update)
                         print(f"  → State updated: resuming to {next_nodes}")
 
@@ -536,8 +569,30 @@ class WorkflowRunner:
                 "section_feedback": section_feedback,
             }
 
-    def _cli_interview(self) -> Dict[str, str]:
-        """Ask interview questions from interview-me skill."""
+    def _cli_interview(self, state: dict = None) -> Dict[str, str]:
+        """Ask for project name, description, existing basedir, and interview questions."""
+        answers = {}
+
+        # Collect project name and description (required)
+        project_name = (state or {}).get("project_name", "") or ""
+        while not project_name:
+            project_name = input("  Project name: ").strip()
+        answers["project_name"] = project_name
+
+        project_description = (state or {}).get("project_description", "") or ""
+        while not project_description:
+            project_description = input("  Project description: ").strip()
+        answers["project_description"] = project_description
+
+        # Collect existing codebase path (optional — leave empty for greenfield)
+        default_context = (state or {}).get("context_folder", "") or ""
+        hint = default_context or "(leave empty for greenfield)"
+        context_folder = input(f"  Existing codebase path [{hint}]: ").strip()
+        if not context_folder and default_context:
+            context_folder = default_context
+        answers["context_folder"] = context_folder
+
+        # Interview questions
         questions = [
             ("core_behavior", "What does this feature do?"),
             ("data_model", "What entities and fields are involved?"),
@@ -550,7 +605,6 @@ class WorkflowRunner:
             ("non_functional", "Performance, security, or monitoring needs?"),
         ]
 
-        answers = {}
         for key, q in questions:
             val = input(f"  {q} (or Enter to skip): ").strip()
             if val:
@@ -558,7 +612,8 @@ class WorkflowRunner:
 
         lines = ["Interview answers:"]
         for key, val in answers.items():
-            lines.append(f"  {key}: {val}")
+            if key not in ("project_name", "project_description"):
+                lines.append(f"  {key}: {val}")
         answers["interview_notes"] = "\n".join(lines)
         answers["approved"] = True
 

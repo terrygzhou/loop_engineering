@@ -94,6 +94,11 @@
     "path": "skills/speckit-checklist/SKILL.md",
     "mtime": 1781963876.7856083
   },
+  "coding-principles": {
+    "version": "1.0.0",
+    "path": "skills/coding-principles/SKILL.md",
+    "mtime": 1782605170.9358659
+  },
   "git-workflow": {
     "version": "1.0.0",
     "path": "skills/git-workflow/SKILL.md",
