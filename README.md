@@ -13,57 +13,57 @@ Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop)
 ```mermaid
 flowchart TB
     subgraph entry["📥 Entry Points"]
-        CLI[\"main.py\nCLI Entry\"]
-        WebUI[\"frontend/backend/app.py\nFastAPI :8011\"]
+        CLI["main.py\nCLI Entry"]
+        WebUI["frontend/backend/app.py\nFastAPI :8011"]
     end
 
     subgraph workflow["🔄 LangGraph Engine"]
-        State[\"state.py\nWorkflowState\"]
-        Graph[\"main.py\nStateGraph\"]
-        Executor[\"executor.py\nWorkflowRunner\"]
-        Edges[\"edges.py\nConditional Routing\n+ Quality Gates\"]
+        State["state.py\nWorkflowState"]
+        Graph["main.py\nStateGraph\ninterrupt_after"]
+        Executor["executor.py\nWorkflowRunner"]
+        Edges["edges.py\nConditional Routing\n+ Quality Gates"]
     end
 
-    subgraph phases["📦 Phase Nodes"]
-        DISCOVER[\"discover.py\nHIL Interview\n+ Codebase Scan\n+ requirement.md\"]
-        DEFINE[\"define.py\nSpec + API Contract"]
-        PLAN[\"plan.py\nPlan + Tasks\n+ Analysis"]
-        ArchNode[\"architecture.py\nComponent/Sequence\nData Flow/Deployment\n→ .mmd files"]
-        ARCH_REVIEW[\"arch_review.py\nHIL Pause\nDiagrams + Spec Review"]
-        BUILD[\"build.py\nIncremental Code Gen\n+ TDD + Security"]
-        SEED[\"seed_data.py\nTest Data Fixtures"]
-        VERIFY[\"verify.py\nUAT + Perf\n+ Debug + Simplify"]
-        SHIP[\"ship.py\nDeploy + Git Tag"]
-        REFLECT[\"reflect.py\nChromaDB Patterns\n+ Config Diffs"]
+    subgraph phases["📦 Phase Nodes (LangGraph)"]
+        DISCOVER["discover.py\nHIL double-pause\n+ Codebase Scan\n→ requirement.md"]
+        DEFINE["define.py\nspeckit-specify\n+ API Contract"]
+        PLAN["plan.py\nPlan + Tasks\n+ Architecture Diagrams"]
+        ARCH_REVIEW["arch_review.py\nLangGraph OOTB interrupt_after\nDiagram + Spec Review"]
+        BUILD["build.py\nIncremental Code Gen\n+ TDD + Security"]
+        SEED["seed_data.py\nTest Data Fixtures"]
+        VERIFY["verify.py\nUAT + Perf\n+ Debug + Simplify"]
+        SHIP["ship.py\nDeploy + Git Tag"]
+        REFLECT["reflect.py\nChromaDB Patterns\n+ Config Diffs"]
     end
 
     subgraph skills["🛠 Skills System"]
-        SkillReg[\"tools/loader.py\nSkill Registry\n~27 SKILL.md files"]
-        LLMTool[\"tools/llm.py\ninvoke_skill()"]
+        SkillReg["tools/loader.py\n~27 SKILL.md files"]
+        LLMTool["tools/llm.py\ninvoke_skill()\n+ context optimization"]
     end
 
-    subgraph hil["👤 HIL Bridges"]
-        Bridge[\"workflow_bridge.py\nSSE Event Emission\n+ LangGraph Resume"]
-        AbortMgr[\"abort_manager.py\nClean Shutdown"]
+    subgraph hil["👤 HIL (Human-in-the-Loop)"]
+        Bridge["workflow_bridge.py\nSSE Event Emission\n+ LangGraph Resume"]
+        AbortMgr["abort_manager.py\nClean Shutdown\n+ Checkpoint Cleanup"]
     end
 
-    subgraph frontend["🖥 Frontend"]
-        AppJS[\"app.js\nSSE Client\n+ Mermaid Rendering\n+ Phase Detail View"]
-        UI[\"index.html\n+ style.css\n+ Mermaid.js CDN"]
+    subgraph frontend["🖥 Web UI Frontend"]
+        AppJS["app.js\nSSE Client\n+ Mermaid Rendering\n+ Phase Detail View"]
+        UI["index.html\n+ style.css\n+ Mermaid.js CDN"]
     end
 
-    subgraph feedback["📊 Feedback Loop"]
-        Aggregator[\"feedback/aggregator.py\nCycle Recording"]
-        ChromaClient[\"feedback/chroma_client.py\nPattern Embeddings"]
-        DiffEngine[\"feedback/diff_engine.py\nConfig Diff Gen"]
-        ChromaDB[(\"ChromaDB\nHistorical Patterns\")]
+    subgraph feedback["📊 Self-Improvement Loop"]
+        Aggregator["feedback/aggregator.py\nCycle Recording"]
+        ChromaClient["feedback/chroma_client.py\nPattern Embeddings\n+ Similarity Search"]
+        DiffEngine["feedback/diff_engine.py\nConfig Diff Gen"]
+        ChromaDB[("ChromaDB\nHistorical Patterns")]
     end
 
-    subgraph deploy["🚀 Deployment"]
-        Docker[\"Dockerfile\nPython + nginx\n+ LangGraph"]
-        Compose[\"docker-compose.yml\nloop + chroma + otel"]
+    subgraph docker["🐳 Docker Stack"]
+        LoopC["loop container\nPython + FastAPI + nginx"]
+        Compose["docker-compose.yml\nloop + chroma + otel"]
     end
 
+    %% Entry → Engine
     CLI --> Executor
     WebUI --> Bridge
     Bridge --> Executor
@@ -72,11 +72,11 @@ flowchart TB
     Graph <--> State
     Graph --> Edges
     
+    %% Pipeline flow (matches graph/main.py wiring)
     Graph --> DISCOVER
     DISCOVER --> DEFINE
     DEFINE --> PLAN
-    PLAN --> ArchNode
-    ArchNode --> ARCH_REVIEW
+    PLAN --> ARCH_REVIEW
     ARCH_REVIEW -->|"approved"| BUILD
     ARCH_REVIEW -->|"rejected"| DEFINE
     BUILD -->|"pass"| SEED
@@ -86,40 +86,45 @@ flowchart TB
     VERIFY -->|"pass"| SHIP
     VERIFY -->|"fail"| BUILD
     SHIP --> REFLECT
-    REFLECT -->|"END"| Done[("✓ Complete")]
+    REFLECT --> END["→ END"]
     
-    DISCOVER -.->|"HIL Pause"| Bridge
-    ARCH_REVIEW -.->|"HIL Pause"| Bridge
+    %% HIL pauses
+    DISCOVER -.->|"interrupt() double-pause"| Bridge
+    ARCH_REVIEW -.->|"interrupt_after"| Bridge
     
+    %% Skills wiring
     DISCOVER --> SkillReg
     DEFINE --> SkillReg
     PLAN --> SkillReg
-    ArchNode --> SkillReg
     BUILD --> SkillReg
     SkillReg --> LLMTool
     
+    %% Frontend flow
     Bridge -->|"SSE Events"| AppJS
     AppJS --> UI
     AppJS -->|"Review Input"| Bridge
     
+    %% Feedback loop
     REFLECT --> Aggregator
     Aggregator --> ChromaClient
     ChromaClient --> ChromaDB
     Aggregator --> DiffEngine
     
-    Executor -.->|"Observability"| OTEL["OpenTelemetry"]
+    %% Observability
+    Executor -.->|"OTel traces"| OTEL["OpenTelemetry"]
     
-    classDef node fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    %% Styling
+    classDef phase fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
     classDef hil fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef skill fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
     classDef storage fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef deploy fill:#fce4ec,stroke:#c2185b,stroke-width:2px
     
-    class DISCOVER,DEFINE,PLAN,ArchNode,BUILD,SEED,VERIFY,SHIP,REFLECT node
-    class ARCH_REVIEW,Bridge,hil hil
+    class DISCOVER,DEFINE,PLAN,ARCH_REVIEW,BUILD,SEED,VERIFY,SHIP,REFLECT phase
+    class ARCH_REVIEW,Bridge AbortMgr hil
     class SkillReg,LLMTool skill
     class ChromaDB storage
-    class Docker,Compose deploy
+    class LoopC,Compose deploy
 ```
 
 ### Key Components
