@@ -15,297 +15,93 @@ Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop)
 
 ## Architecture
 
-<div class="archimate" style="background:#f8f9fa;border:2px solid #dee2e6;border-radius:12px;padding:24px;margin:24px 0;font-family:system-ui,-apple-system,sans-serif">
-  <style scoped>
-    .archimate h2,.archimate h3,.archimate h4,.archimate h5{margin:0 0 8px 0}
-    .archimate h2{text-align:center;font-size:1.5em;margin-bottom:16px}
-    .archimate h3{text-align:center;font-size:1.2em;margin-top:24px}
-    .archimate h4{font-size:1em;margin-bottom:12px}
-    .archimate h5{font-size:0.9em;margin:0}
-    .arch-pipeline{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:20px 0}
-    .arch-phase{padding:8px 16px;border-radius:20px;font-weight:bold;font-size:0.9em;border:2px solid}
-    .arch-phase.phase{background:#e8f5e9;border-color:#4CAF50;color:#1b5e20}
-    .arch-phase.hil{background:#fff3e0;border-color:#FF9800;color:#e65100}
-    .arch-arrow{color:#666;font-size:1.2em}
-    .arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:20px 0}
-    .arch-section{background:white;border-radius:10px;padding:16px;border-left:4px solid;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
-    .arch-component{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:10px;margin:6px 0}
-    .arch-component h5{display:flex;justify-content:space-between;align-items:center}
-    .arch-component .type{font-size:0.75em;color:#666;background:#e8f5e9;padding:2px 6px;border-radius:3px}
-    .arch-component p{margin:0;color:#666;font-size:0.85em}
-    .arch-connections{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:20px 0}
-    .arch-connection{background:white;border:1px solid #dee2e6;border-radius:8px;padding:14px}
-    .arch-connection h4{margin:0 0 10px 0;color:#1a1a2e;font-size:1em}
-    .arch-connection ul{list-style:none;padding:0;margin:0}
-    .arch-connection li{padding:4px 0;font-size:0.85em;color:#666;border-bottom:1px solid #f8f9fa}
-    .arch-connection li:last-child{border-bottom:none}
-    .arch-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
-    .arch-legend-item{display:flex;align-items:center;gap:5px;font-size:0.8em;color:#666}
-    .arch-color{width:16px;height:16px;border-radius:3px;border:2px solid}
-    .arch-decision{text-align:center;margin:12px 0}
-    .arch-decision span{display:inline-block;padding:6px 14px;border-radius:20px;font-size:0.85em;margin:0 8px;font-weight:600}
-    .arch-decision .approved{background:#e8f5e9;border:2px solid #4CAF50;color:#1b5e20}
-    .arch-decision .rejected{background:#ffebee;border:2px solid #F44336;color:#b71c1c}
-  </style>
+<table style="width:100%;border-collapse:collapse">
+<tr>
+<td style="vertical-align:top;padding:20px;background:#f8f9fa;border-radius:8px;border:1px solid #dee2e6">
+<h3 align="center">🔄 Loop Engineering - Component Architecture</h3>
+<p align="center">Self-improving AI-driven software development engine</p>
 
-  <h2>🔄 Loop Engineering Architecture</h2>
-  <p style="text-align:center;color:#666">Archimate Component View - Self-improving AI-driven software development engine</p>
+<table style="width:100%;border-collapse:collapse">
+<tr>
+<td style="width:33%;vertical-align:top;padding:10px;border-right:1px solid #dee2e6">
+<h4>📥 CLI &amp; API</h4>
+<table style="width:100%;border-collapse:collapse">
+<tr><td><div style="background:#e8f5e9;padding:8px;border-radius:4px;margin:4px 0"><strong>main.py</strong><br><small>CLI Entry</small></div></td></tr>
+<tr><td><div style="background:#e8f5e9;padding:8px;border-radius:4px;margin:4px 0"><strong>api/app.py</strong><br><small>FastAPI</small></div></td></tr>
+<tr><td><div style="background:#e8f5e9;padding:8px;border-radius:4px;margin:4px 0"><strong>api/routes.py</strong><br><small>Endpoints</small></div></td></tr>
+<tr><td><div style="background:#e8f5e9;padding:8px;border-radius:4px;margin:4px 0"><strong>api/services.py</strong><br><small>Service Layer</small></div></td></tr>
+</table>
+</td>
+<td style="width:33%;vertical-align:top;padding:10px;border-right:1px solid #dee2e6">
+<h4>🔄 LangGraph</h4>
+<table style="width:100%;border-collapse:collapse">
+<tr><td><div style="background:#e3f2fd;padding:8px;border-radius:4px;margin:4px 0"><strong>graph/main.py</strong><br><small>StateGraph</small></div></td></tr>
+<tr><td><div style="background:#e3f2fd;padding:8px;border-radius:4px;margin:4px 0"><strong>graph/executor.py</strong><br><small>WorkflowRunner</small></div></td></tr>
+<tr><td><div style="background:#e3f2fd;padding:8px;border-radius:4px;margin:4px 0"><strong>graph/state.py</strong><br><small>State Mgmt</small></div></td></tr>
+<tr><td><div style="background:#e3f2fd;padding:8px;border-radius:4px;margin:4px 0"><strong>graph/edges.py</strong><br><small>Routing</small></div></td></tr>
+</table>
+</td>
+<td style="width:34%;vertical-align:top;padding:10px">
+<h4>📋 Phase Nodes</h4>
+<table style="width:100%;border-collapse:collapse">
+<tr><td><div style="background:#fff3e0;padding:8px;border-radius:4px;margin:4px 0"><strong>discover.py</strong><br><small>HIL + Scan</small></div></td></tr>
+<tr><td><div style="background:#fff3e0;padding:8px;border-radius:4px;margin:4px 0"><strong>define.py</strong><br><small>Spec Gen</small></div></td></tr>
+<tr><td><div style="background:#fff3e0;padding:8px;border-radius:4px;margin:4px 0"><strong>plan.py</strong><br><small>Architecture</small></div></td></tr>
+<tr><td><div style="background:#ffebee;padding:8px;border-radius:4px;margin:4px 0"><strong>arch_review.py</strong><br><small>HIL Gate</small></div></td></tr>
+<tr><td><div style="background:#fff3e0;padding:8px;border-radius:4px;margin:4px 0"><strong>build.py</strong><br><small>Code Gen</small></div></td></tr>
+</table>
+</td>
+</tr>
+<tr>
+<td style="vertical-align:top;padding:10px;border-right:1px solid #dee2e6">
+<h4>🛠 Tools</h4>
+<table style="width:100%;border-collapse:collapse">
+<tr><td><div style="background:#f3e5f5;padding:8px;border-radius:4px;margin:4px 0"><strong>tools/loader.py</strong><br><small>Skill Registry</small></div></td></tr>
+<tr><td><div style="background:#f3e5f5;padding:8px;border-radius:4px;margin:4px 0"><strong>tools/llm.py</strong><br><small>LLM Client</small></div></td></tr>
+<tr><td><div style="background:#f3e5f5;padding:8px;border-radius:4px;margin:4px 0"><strong>tools/context_manager.py</strong><br><small>Context Mgmt</small></div></td></tr>
+</table>
+</td>
+<td style="vertical-align:top;padding:10px;border-right:1px solid #dee2e6">
+<h4>👤 HIL Frontend</h4>
+<table style="width:100%;border-collapse:collapse">
+<tr><td><div style="background:#fce4ec;padding:8px;border-radius:4px;margin:4px 0"><strong>frontend/backend/app.py</strong><br><small>Frontend API</small></div></td></tr>
+<tr><td><div style="background:#fce4ec;padding:8px;border-radius:4px;margin:4px 0"><strong>workflow_bridge.py</strong><br><small>SSE Bridge</small></div></td></tr>
+<tr><td><div style="background:#fce4ec;padding:8px;border-radius:4px;margin:4px 0"><strong>abort_manager.py</strong><br><small>Abort Mgmt</small></div></td></tr>
+</table>
+</td>
+<td style="vertical-align:top;padding:10px">
+<h4>📊 Feedback</h4>
+<table style="width:100%;border-collapse:collapse">
+<tr><td><div style="background:#e8eaf6;padding:8px;border-radius:4px;margin:4px 0"><strong>feedback/aggregator.py</strong><br><small>Patterns</small></div></td></tr>
+<tr><td><div style="background:#e8eaf6;padding:8px;border-radius:4px;margin:4px 0"><strong>feedback/chroma_client.py</strong><br><small>ChromaDB</small></div></td></tr>
+<tr><td><div style="background:#e8eaf6;padding:8px;border-radius:4px;margin:4px 0"><strong>feedback/diff_engine.py</strong><br><small>Config Diffs</small></div></td></tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
 
-  <h3>📊 Pipeline Flow</h3>
-  <div class="arch-pipeline">
-    <div class="arch-phase phase">DISCOVER</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">DEFINE</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">PLAN</div><div class="arch-arrow">→</div>
-    <div class="arch-phase hil">ARCH_REVIEW</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">BUILD</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">SEED_DATA</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">VERIFY</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">SHIP</div><div class="arch-arrow">→</div>
-    <div class="arch-phase phase">REFLECT</div>
-  </div>
-  <div class="arch-decision">
-    <span class="approved">✅ Approved → Next Phase</span>
-    <span class="rejected">❌ Rejected → Loop Back</span>
-  </div>
+### Data Flow
 
-  <h3>📦 Component Architecture</h3>
-  <div class="arch-grid">
-    <div class="arch-section" style="border-left-color:#4CAF50">
-      <h4>📥 CLI &amp; API Layer</h4>
-      <div class="arch-component">
-        <h5>CLI Entry <span class="type">Application</span></h5>
-        <p>main.py - CLI entry point</p>
-      </div>
-      <div class="arch-component">
-        <h5>API Gateway <span class="type">Application</span></h5>
-        <p>api/app.py - FastAPI entry</p>
-      </div>
-      <div class="arch-component">
-        <h5>API Routes <span class="type">Application</span></h5>
-        <p>api/routes.py - REST endpoints</p>
-      </div>
-      <div class="arch-component">
-        <h5>API Services <span class="type">Application</span></h5>
-        <p>api/services.py - Workflow service</p>
-      </div>
-      <div class="arch-component">
-        <h5>Input Manager <span class="type">Application</span></h5>
-        <p>api/input_manager.py - HIL input</p>
-      </div>
-    </div>
+| Component | Connects To | Description |
+|-----------|-------------|------------|
+| CLI → API Gateway → LangGraph | Workflow Execution | Headless workflow execution |
+| HIL Frontend ↔ LangGraph | Human Review | Interrupt/resume for ARCH_REVIEW |
+| Phase Nodes → Tools | Skill Invocation | LLM-driven code generation |
+| Feedback → ChromaDB | Pattern Storage | Self-improvement loop |
 
-    <div class="arch-section" style="border-left-color:#2196F3">
-      <h4>🔄 LangGraph Engine</h4>
-      <div class="arch-component">
-        <h5>StateGraph <span class="type">Engine</span></h5>
-        <p>graph/main.py - Graph construction</p>
-      </div>
-      <div class="arch-component">
-        <h5>WorkflowRunner <span class="type">Engine</span></h5>
-        <p>graph/executor.py - Shared executor</p>
-      </div>
-      <div class="arch-component">
-        <h5>WorkflowState <span class="type">State</span></h5>
-        <p>graph/state.py - State management</p>
-      </div>
-      <div class="arch-component">
-        <h5>EdgeRouter <span class="type">Engine</span></h5>
-        <p>graph/edges.py - Conditional routing</p>
-      </div>
-      <div class="arch-component">
-        <h5>Checkpoint Saver <span class="type">Storage</span></h5>
-        <p>graph/sqlite_saver.py - Persistence</p>
-      </div>
-    </div>
+### Quality Gates
 
-    <div class="arch-section" style="border-left-color:#9C27B0">
-      <h4>📋 Phase Nodes</h4>
-      <div class="arch-component">
-        <h5>DISCOVER <span class="type">Phase</span></h5>
-        <p>HIL interview + codebase scan</p>
-      </div>
-      <div class="arch-component">
-        <h5>DEFINE <span class="type">Phase</span></h5>
-        <p>Spec + API contract generation</p>
-      </div>
-      <div class="arch-component">
-        <h5>PLAN <span class="type">Phase</span></h5>
-        <p>Architecture + task planning</p>
-      </div>
-      <div class="arch-component">
-        <h5>ARCH_REVIEW <span class="type">HIL</span></h5>
-        <p>Human review gate</p>
-      </div>
-      <div class="arch-component">
-        <h5>BUILD <span class="type">Phase</span></h5>
-        <p>Code generation + TDD</p>
-      </div>
-      <div class="arch-component">
-        <h5>SEED_DATA <span class="type">Phase</span></h5>
-        <p>Test data fixtures</p>
-      </div>
-      <div class="arch-component">
-        <h5>VERIFY <span class="type">Phase</span></h5>
-        <p>UAT + performance testing</p>
-      </div>
-      <div class="arch-component">
-        <h5>SHIP <span class="type">Phase</span></h5>
-        <p>Deploy + observability</p>
-      </div>
-      <div class="arch-component">
-        <h5>REFLECT <span class="type">Phase</span></h5>
-        <p>Self-improvement loop</p>
-      </div>
-    </div>
-
-    <div class="arch-section" style="border-left-color:#FF9800">
-      <h4>🛠 Tools &amp; Skills</h4>
-      <div class="arch-component">
-        <h5>Skill Registry <span class="type">Registry</span></h5>
-        <p>tools/loader.py - ~27 SKILL.md</p>
-      </div>
-      <div class="arch-component">
-        <h5>LLM Client <span class="type">Client</span></h5>
-        <p>tools/llm.py - LLM invocation</p>
-      </div>
-      <div class="arch-component">
-        <h5>Context Manager <span class="type">Manager</span></h5>
-        <p>tools/context_manager.py - Optimization</p>
-      </div>
-      <div class="arch-component">
-        <h5>Audit Logger <span class="type">Logger</span></h5>
-        <p>tools/audit_logger.py - Audit trail</p>
-      </div>
-      <div class="arch-component">
-        <h5>Distiller <span class="type">Processor</span></h5>
-        <p>tools/distiller.py - Response distillation</p>
-      </div>
-    </div>
-
-    <div class="arch-section" style="border-left-color:#F44336">
-      <h4>👤 HIL Frontend</h4>
-      <div class="arch-component">
-        <h5>Frontend API <span class="type">API</span></h5>
-        <p>frontend/backend/app.py - FastAPI</p>
-      </div>
-      <div class="arch-component">
-        <h5>Workflow Bridge <span class="type">Bridge</span></h5>
-        <p>frontend/backend/workflow_bridge.py - SSE</p>
-      </div>
-      <div class="arch-component">
-        <h5>Abort Manager <span class="type">Manager</span></h5>
-        <p>frontend/backend/abort_manager.py - Cleanup</p>
-      </div>
-      <div class="arch-component">
-        <h5>Web UI <span class="type">UI</span></h5>
-        <p>frontend/static/js/app.js - Client</p>
-      </div>
-      <div class="arch-component">
-        <h5>Styles <span class="type">UI</span></h5>
-        <p>frontend/static/css/style.css - CSS</p>
-      </div>
-    </div>
-
-    <div class="arch-section" style="border-left-color:#795548">
-      <h4>📊 Feedback Loop</h4>
-      <div class="arch-component">
-        <h5>Aggregator <span class="type">Processor</span></h5>
-        <p>feedback/aggregator.py - Patterns</p>
-      </div>
-      <div class="arch-component">
-        <h5>Chroma Client <span class="type">Client</span></h5>
-        <p>feedback/chroma_client.py - ChromaDB</p>
-      </div>
-      <div class="arch-component">
-        <h5>Diff Engine <span class="type">Engine</span></h5>
-        <p>feedback/diff_engine.py - Config diffs</p>
-      </div>
-    </div>
-
-    <div class="arch-section" style="border-left-color:#00BCD4">
-      <h4>⚙️ Configuration</h4>
-      <div class="arch-component">
-        <h5>Config <span class="type">Config</span></h5>
-        <p>config/config.yaml - Three-tier config</p>
-      </div>
-      <div class="arch-component">
-        <h5>Guardrails <span class="type">Enforcer</span></h5>
-        <p>config/guardrails.py - Thresholds</p>
-      </div>
-      <div class="arch-component">
-        <h5>Prompt Templates <span class="type">Templates</span></h5>
-        <p>config/prompt_templates.py - LLM prompts</p>
-      </div>
-    </div>
-
-    <div class="arch-section" style="border-left-color:#607D8B">
-      <h4>🔧 Services</h4>
-      <div class="arch-component">
-        <h5>Health Check <span class="type">Service</span></h5>
-        <p>service/health.py - Health monitoring</p>
-      </div>
-      <div class="arch-component">
-        <h5>OpenTelemetry <span class="type">Observability</span></h5>
-        <p>service/otel_instrumentor.py - Traces</p>
-      </div>
-      <div class="arch-component">
-        <h5>Structured Logger <span class="type">Logger</span></h5>
-        <p>log/logging.py - Logs</p>
-      </div>
-    </div>
-  </div>
-
-  <h3>🔗 Data Flow</h3>
-  <div class="arch-connections">
-    <div class="arch-connection">
-      <h4>🔄 Workflow Execution</h4>
-      <ul>
-        <li>CLI → API Gateway → LangGraph Engine</li>
-        <li>API Gateway → LangGraph Engine</li>
-        <li>LangGraph → Phase Nodes</li>
-        <li>Phase Nodes → Tools & Skills</li>
-      </ul>
-    </div>
-    <div class="arch-connection">
-      <h4>👥 HIL Bridge</h4>
-      <ul>
-        <li>LangGraph → HIL Frontend (SSE)</li>
-        <li>HIL Frontend → LangGraph (Resume)</li>
-        <li>Phase Nodes → HIL Frontend (Review)</li>
-        <li>HIL Frontend → Phase Nodes (Approvals)</li>
-      </ul>
-    </div>
-    <div class="arch-connection">
-      <h4>📊 Feedback Loop</h4>
-      <ul>
-        <li>Feedback Loop → LangGraph Engine</li>
-        <li>Feedback Loop → Tools & Skills</li>
-        <li>Phase Nodes → Feedback Loop (Patterns)</li>
-        <li>Feedback Loop → Phase Nodes (Patterns)</li>
-      </ul>
-    </div>
-    <div class="arch-connection">
-      <h4>🎯 Quality Gates</h4>
-      <ul>
-        <li>ARCH_REVIEW approved → BUILD</li>
-        <li>ARCH_REVIEW rejected → DEFINE</li>
-        <li>BUILD pass → SEED_DATA / fail → PLAN</li>
-        <li>VERIFY pass → SHIP / fail → BUILD</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="arch-legend">
-    <div class="arch-legend-item"><div class="arch-color" style="background:#e8f5e9;border-color:#4CAF50"></div>Application</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#e3f2fd;border-color:#2196F3"></div>Engine</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#f3e5f5;border-color:#9C27B0"></div>Phase Nodes</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#fff3e0;border-color:#FF9800"></div>Tools & Skills</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#ffebee;border-color:#F44336"></div>HIL Frontend</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#fbe9e7;border-color:#795548"></div>Feedback</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#e0f7fa;border-color:#00BCD4"></div>Configuration</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#eceff1;border-color:#607D8B"></div>Services</div>
-  </div>
-</div>
+| Gate | Condition | Outcome |
+|------|-----------|---------|
+| ARCH_REVIEW | Approved | → BUILD |
+| ARCH_REVIEW | Rejected | → DEFINE |
+| BUILD | Pass | → SEED_DATA |
+| BUILD | Fail | → PLAN |
+| VERIFY | Pass | → SHIP |
+| VERIFY | Fail | → BUILD |
 ## Key Components
 
 - **Entry Points**: CLI (`main.py`) for headless auto-approve, or Web UI (FastAPI `:8011`) for HIL workflow
