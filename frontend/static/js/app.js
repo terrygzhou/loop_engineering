@@ -901,24 +901,42 @@ function renderArchReview(phase, data) {
   state.interviewActive = true;
   state.interviewPhase = phase;
 
+  // Get PNG data URLs from backend
+  const diagramPngs = data.diagram_pngs || {};
+  const pngKeys = Object.keys(diagramPngs);
+
+  // Fallback to old diagram format if no PNGs
   const diagrams = data.diagrams || {};
-  const diagramKeys = Object.keys(diagrams);
+  const rawKeys = Object.keys(diagrams);
+  const usePng = pngKeys.length > 0;
+
+  const keys = usePng ? pngKeys : rawKeys;
 
   // Build tabbed diagram viewer
   let tabsHtml = '<div class="diagram-tabs" role="tablist">';
-  diagramKeys.forEach((key, i) => {
-    tabsHtml += `<button class="diagram-tab ${i === 0 ? 'active' : ''}" data-tab="${key}">${key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</button>`;
+  keys.forEach((key, i) => {
+    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    tabsHtml += `<button class="diagram-tab ${i === 0 ? 'active' : ''}" data-tab="${key}">${label}</button>`;
   });
   tabsHtml += '</div>';
 
   let panelsHtml = '<div class="diagram-panels">';
-  diagramKeys.forEach((key, i) => {
-    const raw = diagrams[key];
-    panelsHtml += `<div class="diagram-panel ${i === 0 ? 'active' : ''}" id="diagram-panel-${key}" data-diagram="${key}">
-      <div class="mermaid-container"><div class="mermaid" id="mermaid-${key}">${raw || 'No diagram generated'}</div></div>
-      <div class="diagram-source-toggle"><button class="btn btn-sm btn-secondary" onclick="toggleSource('${key}')">Toggle Source</button></div>
-      <pre class="diagram-source" id="source-${key}" style="display:none;">${raw || ''}</pre>
-    </div>`;
+  keys.forEach((key, i) => {
+    if (usePng) {
+      const dataUrl = diagramPngs[key] || '';
+      panelsHtml += `<div class="diagram-panel ${i === 0 ? 'active' : ''}" id="diagram-panel-${key}" data-diagram="${key}">
+        <div class="diagram-image-container">
+          ${dataUrl ? `<img src="${dataUrl}" alt="${key.replace(/_/g, ' ')}" class="diagram-image">` : '<p>No diagram generated</p>'}
+        </div>
+      </div>`;
+    } else {
+      const raw = diagrams[key];
+      panelsHtml += `<div class="diagram-panel ${i === 0 ? 'active' : ''}" id="diagram-panel-${key}" data-diagram="${key}">
+        <div class="mermaid-container"><div class="mermaid" id="mermaid-${key}">${raw || 'No diagram generated'}</div></div>
+        <div class="diagram-source-toggle"><button class="btn btn-sm btn-secondary" onclick="toggleSource('${key}')">Toggle Source</button></div>
+        <pre class="diagram-source" id="source-${key}" style="display:none;">${raw || ''}</pre>
+      </div>`;
+    }
   });
   panelsHtml += '</div>';
 
@@ -949,20 +967,22 @@ function renderArchReview(phase, data) {
   dom.detailTitle.textContent = `${phase} — Architecture Review`;
   dom.detailContent.innerHTML = tabsHtml + panelsHtml + summaryHtml + feedbackHtml + actionsHtml;
 
-  // Render Mermaid diagrams (async)
-  const renderAll = async () => {
-    for (const key of diagramKeys) {
-      try {
-        const el = document.getElementById(`mermaid-${key}`);
-        if (el && el.textContent.trim() !== 'No diagram generated') {
-          await mermaid.run({nodes: [el]});
+  // Render Mermaid diagrams (only for fallback mode)
+  if (!usePng) {
+    const renderAll = async () => {
+      for (const key of rawKeys) {
+        try {
+          const el = document.getElementById(`mermaid-${key}`);
+          if (el && el.textContent.trim() !== 'No diagram generated') {
+            await mermaid.run({nodes: [el]});
+          }
+        } catch (e) {
+          console.error(`Mermaid render failed for ${key}:`, e);
         }
-      } catch (e) {
-        console.error(`Mermaid render failed for ${key}:`, e);
       }
-    }
-  };
-  renderAll();
+    };
+    renderAll();
+  }
 
   // Tab switching
   document.querySelectorAll('.diagram-tab').forEach(tab => {

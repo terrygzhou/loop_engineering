@@ -127,6 +127,46 @@ def _generate_all_diagrams(skills: dict, state: dict) -> dict[str, str]:
     return diagrams
 
 
+def _convert_diagrams_to_png(diagrams: dict[str, str]) -> dict[str, str]:
+    """Convert .mmd diagrams to PNG for UI rendering."""
+    import asyncio
+    import os
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent.parent))
+    from tools.convert_diagrams import extract_mermaid, make_html
+
+    png_paths = {}
+    for dtype, mmd_path_str in diagrams.items():
+        mmd_path = Path(mmd_path_str)
+        if not mmd_path.exists():
+            continue
+        png_path = _Path(str(mmd_path.parent) + "/" + mmd_path.stem + ".png")
+        try:
+            content = mmd_path.read_text()
+            mermaid_content = extract_mermaid(content)
+            tmp_html_path = make_html(mermaid_content)
+
+            async def _convert(tmp: str, out: _Path):
+                from playwright.async_api import async_playwright
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    page = await browser.new_page(viewport={"width": 1400, "height": 1000})
+                    await page.goto(f"file://{_Path(tmp).resolve()}")
+                    await page.wait_for_timeout(5000)
+                    await page.screenshot(path=str(out), full_page=False)
+                    await browser.close()
+
+            asyncio.run(_convert(tmp_html_path, png_path))
+            os.unlink(tmp_html_path)
+            png_paths[dtype] = str(png_path)
+            print(f"  ✓ {mmd_path.name} → {png_path.name}")
+        except Exception as e:
+            print(f"  ⚠ Failed to convert {dtype}: {e}")
+    return png_paths
+
+
 def plan_node(state: dict) -> dict:
     """
     PLAN phase: Generate implementation plan, tasks, analysis, and architecture diagrams.
@@ -229,6 +269,11 @@ def plan_node(state: dict) -> dict:
     # ── Step 6: Generate architecture diagrams ──
     print("  → Running architecture-diagram-generator...")
     diagrams = _generate_all_diagrams(skills, state)
+
+    # ── Convert diagrams to PNG ──
+    png_paths = _convert_diagrams_to_png(diagrams)
+    state["artifacts"]["diagram_pngs"] = png_paths
+
     state["artifacts"]["diagrams"] = diagrams
     state["diagrams"] = diagrams
     state["diagram_status"] = "pending"
@@ -236,7 +281,7 @@ def plan_node(state: dict) -> dict:
     state["metrics"] = state["metrics"].model_copy(update={
         "diagram_count": diagram_count,
     })
-    feedback.append({"skill": "architecture-diagram-generator", "output": f"Generated {diagram_count} diagrams"})
+    feedback.append({"skill": "architecture-diagram-generator", "output": f"Generated {diagram_count} diagrams + {len(png_paths)} PNGs"})
 
     # ── Derive architectural uncertainty ──
     arch_uncertainty = _estimate_arch_uncertainty(state["artifacts"])

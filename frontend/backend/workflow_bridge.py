@@ -796,23 +796,26 @@ class WorkflowBridge:
                     elif interrupted_phase == "DISCOVER" and hil_type == "interview":
                         await self._send_interview(interrupted_phase)
                     elif interrupted_phase == "ARCH_REVIEW":
-                        # Gather diagram content from state for UI rendering
-                        diagrams = {}
+                        # Gather diagram PNGs from state for UI rendering
+                        diagram_pngs = {}
                         graph_state = await graph.aget_state(config)
                         current = graph_state.values or {}
                         artifacts = current.get("artifacts", {})
-                        diagram_paths = artifacts.get("diagrams", {})
-                        # Read diagram files and include content
-                        import os
-                        for dname, dpath in diagram_paths.items():
+                        # Get PNG paths from diagram_pngs
+                        png_paths = artifacts.get("diagram_pngs", {})
+                        import base64
+                        for dname, png_path_str in png_paths.items():
                             try:
-                                with open(dpath, 'r') as f:
-                                    diagrams[dname] = f.read()
+                                with open(png_path_str, 'rb') as f:
+                                    png_data = f.read()
+                                    # Base64 encode for inline transfer
+                                    b64 = base64.b64encode(png_data).decode('utf-8')
+                                    diagram_pngs[dname] = f"data:image/png;base64,{b64}"
                             except Exception:
-                                diagrams[dname] = ""
+                                diagram_pngs[dname] = ""
                         ev = self.add_event(interrupted_phase, "review",
                             "Architecture Review required",
-                            {"type": "arch_review", "diagrams": diagrams})
+                            {"type": "arch_review", "diagram_pngs": diagram_pngs})
                         await self.broadcast(ev)
                     else:
                         ev = self.add_event(interrupted_phase, "waiting", f"Waiting for user input — {interrupted_phase}", {"type": "review_approval"})
