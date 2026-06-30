@@ -3,19 +3,21 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install all Python dependencies (orchestrator + frontend)
+# Install Python dependencies (orchestrator + frontend)
 COPY requirements.txt ./
 COPY frontend/requirements.txt frontend-requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt -r frontend-requirements.txt && \
-    rm frontend-requirements.txt && \
-    python3 -m playwright install chromium --with-deps
+    rm frontend-requirements.txt
 
 # ─── Stage 2: Runtime — Python + nginx ─────────────────────────
 FROM python:3.12-slim
 
-# Install nginx
-RUN apt-get update && apt-get install -y --no-install-recommends nginx && \
-    rm -rf /var/lib/apt/lists/*
+# Install nginx + Playwright Chromium with system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nginx \
+    libglib2.0-0 libnss3 libx11-6 libxcomposite1 libxcursor1 libxrandr2 libasound2 libatk1.0-0 libcups2 libxkbcommon0 libdrm2 libgbm1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m playwright install chromium
 
 WORKDIR /app
 
