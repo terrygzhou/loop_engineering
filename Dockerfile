@@ -7,7 +7,8 @@ WORKDIR /app
 COPY requirements.txt ./
 COPY frontend/requirements.txt frontend-requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt -r frontend-requirements.txt && \
-    rm frontend-requirements.txt
+    rm frontend-requirements.txt && \
+    python3 -m playwright install chromium --with-deps
 
 # ─── Stage 2: Runtime — Python + nginx ─────────────────────────
 FROM python:3.12-slim
