@@ -12,10 +12,12 @@ RUN pip install --no-cache-dir -r requirements.txt -r frontend-requirements.txt 
 # ─── Stage 2: Runtime — Python + nginx ─────────────────────────
 FROM python:3.12-slim
 
-# Install nginx + Playwright Chromium with system dependencies
+# Install nginx + system deps + Playwright Chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
-    libglib2.0-0 libnss3 libx11-6 libxcomposite1 libxcursor1 libxrandr2 libasound2 libatk1.0-0 libcups2 libxkbcommon0 libdrm2 libgbm1 \
+    fonts-liberation libasound2 libatk-bridge2.0-0 libcups2 libdrm2 \
+    libgbm1 libnss3 libx11-6 libxcomposite1 libxcursor1 libxdamage1 \
+    libxfixes3 libxrandr2 libxshmfence1 libxtst6 libpango-1.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m playwright install chromium
 
