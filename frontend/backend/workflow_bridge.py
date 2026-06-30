@@ -17,6 +17,13 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import WebSocket
 
+# Import AbortManager — handle both package and direct import paths
+try:
+    from backend.abort_manager import AbortManager
+except ImportError:
+    import sys as _sys, pathlib as _pathlib
+    _sys.path.insert(0, str(_pathlib.Path(__file__).parent))
+    from abort_manager import AbortManager
 
 # ─── Skill-driven interview questions ─────────────────────────────
 # Derived from interview-me SKILL.md — the 9 question categories
@@ -138,6 +145,8 @@ class WorkflowBridge:
         self._spec_text = ""
         self._context_folder = ""
         self._interrupt_counts: Dict[str, int] = {}  # Track interrupt index per phase
+        self._thread_id: Optional[str] = None          # Current LangGraph thread (for abort cleanup)
+        self._checkpointer = None                      # Current checkpointer instance
 
         # Initialize phase tracking
         for phase in self.PHASES:
@@ -344,20 +353,37 @@ class WorkflowBridge:
     async def abort(self):
         """Abort the running workflow and fully reset state.
 
-        Cancels the running task, clears phase states, events, and cached
-        artifacts so the UI returns to a clean idle state ready for a fresh start.
+        Strategy:
+        1. Signal AbortManager so the workflow loop exits immediately
+        2. Cancel the running task (raises CancelledError at next await)
+        3. Delete the LangGraph checkpoint thread (prevents stale state)
+        4. Reset all bridge state
         """
+        # Get the shared abort manager and signal it
+        abort_mgr = AbortManager.get()
+        abort_mgr.signal()
+
         if self._aborted:
             return {"status": "already_aborted"}
         self._aborted = True
 
-        # Cancel the running task — this raises CancelledError inside run_real/run_simulated
+        # Cancel the running task
         if self._run_task and not self._run_task.done():
             self._run_task.cancel()
             try:
-                await self._run_task
-            except (asyncio.CancelledError, Exception):
+                await asyncio.wait_for(self._run_task, timeout=3.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
+
+        # Delete the LangGraph checkpoint thread (prevents stale state)
+        if self._thread_id and self._checkpointer:
+            try:
+                self._checkpointer.delete_thread(self._thread_id)
+            except Exception:
+                pass
+
+        # Clear abort signal for fresh start
+        abort_mgr.clear()
 
         # ── Full state reset ──
         self.status = "idle"
@@ -370,7 +396,9 @@ class WorkflowBridge:
         self._seen_artifacts = {}
         self.user_inputs = {}
         self.events = []
-        self._interrupt_counts = {}  # Reset interrupt tracking on abort
+        self._interrupt_counts = {}
+        self._thread_id = None
+        self._checkpointer = None
 
         # Reset phase tracking
         for phase in self.PHASES:
@@ -383,7 +411,7 @@ class WorkflowBridge:
                 "messages": [],
             }
 
-        ev = self.add_event("SYSTEM", "error", "Workflow aborted — all state reset")
+        ev = self.add_event("SYSTEM", "aborted", "Workflow aborted — all state reset")
         await self.broadcast(ev)
         return {"status": "aborted", "cycle": self.cycle, "phases": list(self.phase_states.values())}
 
@@ -480,14 +508,9 @@ class WorkflowBridge:
 
         # If no context folder, skip DISCOVER immediately
         skip_discover = not bool(self._context_folder)
+        # DISCOVER always runs — if project_name provided, interrupt(project_setup) is skipped automatically
         phases_to_run = self.PHASES
-        if skip_discover:
-            self.current_phase = "DISCOVER"
-            ev = self.add_event("DISCOVER", "started", "Entering DISCOVER phase")
-            await self.broadcast(ev)
-            ev = self.add_event("DISCOVER", "completed", "DISCOVER skipped — no context folder (greenfield)")
-            await self.broadcast(ev)
-            phases_to_run = self.PHASES[1:]  # Skip DISCOVER
+        self._last_phase = None
 
         for phase in phases_to_run:
             if self._aborted:
@@ -585,15 +608,21 @@ class WorkflowBridge:
         self.waiting_for = None
         self._last_phase = None
 
+        # Clear abort signal for fresh run
+        AbortManager.get().clear()
+        print(f"[Bridge.run_real] abort cleared, is_aborted={AbortManager.get().is_aborted}", flush=True)
+
         # ── Use shared executor for graph + state (same as CLI) ──
         from graph.executor import WorkflowRunner, _get_checkpointer
         from langgraph.errors import GraphInterrupt
         from langgraph.types import Command
         import uuid as _uuid
 
-        # Fresh checkpointer for this run
+        # Fresh checkpointer for this run — store for abort cleanup
         checkpointer = _get_checkpointer()
         thread_id = str(_uuid.uuid4())
+        self._checkpointer = checkpointer
+        self._thread_id = thread_id
         config = {"configurable": {"thread_id": thread_id}}
 
         # Build state via shared executor — guarantees identical state for both modes
@@ -607,16 +636,9 @@ class WorkflowBridge:
         ev = self.add_event("SYSTEM", "started", f"Cycle {self.cycle} — real workflow started for: {self._project_name or 'Untitled'}")
         await self.broadcast(ev)
 
-        # If skipping DISCOVER (no context folder), pre-emit so UI stays in sync
-        if state.get("skip_discover"):
-            self.current_phase = "DISCOVER"
-            ev = self.add_event("DISCOVER", "started", "Entering DISCOVER phase")
-            await self.broadcast(ev)
-            ev = self.add_event("DISCOVER", "completed", "DISCOVER skipped — no context folder provided")
-            await self.broadcast(ev)
-            self._last_phase = "DISCOVER"
-        else:
-            self._last_phase = None
+        # DISCOVER always runs — if project_name provided, interrupt(project_setup) is skipped automatically
+        self._last_phase = None
+        completed = False
 
         try:
             # ── OOTB interrupt/resume loop ──
@@ -624,15 +646,65 @@ class WorkflowBridge:
             graph = build_graph(checkpointer=checkpointer, auto_approve=self._auto_approve)
 
             input_state = state
-            while True:
+            abort_mgr = AbortManager.get()
+            while not self._aborted and not completed:
                 if self._aborted:
                     break
 
-                # Stream execution until interrupt or completion
+                # ── Abort-responsive stream iteration ──
+                # graph.astream() is an async generator. We iterate explicitly
+                # with AbortManager so the abort signal can break us out mid-stream.
+                stream = graph.astream(input_state, stream_mode="values", config=config)
                 interrupted_chunk = None
-                async for chunk in graph.astream(input_state, stream_mode="values", config=config):
+                chunk_count = 0
+
+                while True:
                     if self._aborted:
                         break
+
+                    # Race: get next chunk OR abort signal
+                    # Timeout=999s is effectively "wait forever unless aborted"
+                    next_task = asyncio.ensure_future(stream.__anext__())
+                    abort_task = asyncio.ensure_future(abort_mgr.wait(999))
+
+                    done, pending = await asyncio.wait(
+                        {next_task, abort_task}, return_when=asyncio.FIRST_COMPLETED
+                    )
+
+                    # Clean up pending tasks
+                    for t in pending:
+                        t.cancel()
+                        try:
+                            await t
+                        except BaseException:
+                            pass
+
+                    if abort_task in done and abort_mgr.is_aborted:
+                        # Actual abort — cancel chunk fetch and break
+                        next_task.cancel()
+                        try:
+                            await next_task
+                        except BaseException:
+                            pass
+                        break
+
+                    if next_task in done:
+                        # Chunk arrived — cancel abort waiter and process
+                        abort_task.cancel()
+                        try:
+                            await abort_task
+                        except BaseException:
+                            pass
+                        try:
+                            chunk = next_task.result()
+                            chunk_count += 1
+                        except StopAsyncIteration:
+                            print("[Bridge] StopAsyncIteration", flush=True)
+                            break  # stream exhausted (normal completion)
+                    else:
+                        # Both completed (rare) — re-loop
+                        print("[Bridge] both tasks completed (rare)", flush=True)
+                        continue
 
                     # Check for interrupt signal in chunk (LangGraph yields __interrupt__ on suspend)
                     if "__interrupt__" in chunk:
@@ -668,9 +740,6 @@ class WorkflowBridge:
                         await self.broadcast(ev)
                         self._last_phase = phase
 
-                        # Skill-driven interview at DEFINE
-                        if phase == "DEFINE":
-                            await self._send_interview(phase)
                     else:
                         ev = self.add_event(phase, "progress", f"{phase} processing...")
                         await self.broadcast(ev)
@@ -692,14 +761,18 @@ class WorkflowBridge:
                         or self._last_phase
                         or "UNKNOWN"
                     )
-                    # Determine HIL type using interrupt counter (more reliable than state inspection)
-                    count = self._interrupt_counts.get(interrupted_phase, 0)
-                    self._interrupt_counts[interrupted_phase] = count + 1
-                    print(f"  → HIL pause for: {interrupted_phase}, interrupt_index={count}")
+                    # Determine HIL type from the actual interrupt value in the stream
+                    interrupted_type = None
+                    if interrupted_chunk and "__interrupt__" in interrupted_chunk:
+                        for iv in interrupted_chunk["__interrupt__"]:
+                            interrupted_type = iv.value.get("type")
+                            break
 
-                    if interrupted_phase == "DISCOVER" and count == 0:
+                    print(f"  → HIL pause for: {interrupted_phase}, type={interrupted_type}")
+
+                    if interrupted_phase == "DISCOVER" and interrupted_type == "project_setup":
                         hil_type = "project_setup"
-                    elif interrupted_phase == "DISCOVER":
+                    elif interrupted_phase == "DISCOVER" and interrupted_type == "interview":
                         hil_type = "interview"
                     elif interrupted_phase == "ARCH_REVIEW":
                         hil_type = "arch_review"
@@ -722,6 +795,25 @@ class WorkflowBridge:
                         await self.broadcast(ev)
                     elif interrupted_phase == "DISCOVER" and hil_type == "interview":
                         await self._send_interview(interrupted_phase)
+                    elif interrupted_phase == "ARCH_REVIEW":
+                        # Gather diagram content from state for UI rendering
+                        diagrams = {}
+                        graph_state = await graph.aget_state(config)
+                        current = graph_state.values or {}
+                        artifacts = current.get("artifacts", {})
+                        diagram_paths = artifacts.get("diagrams", {})
+                        # Read diagram files and include content
+                        import os
+                        for dname, dpath in diagram_paths.items():
+                            try:
+                                with open(dpath, 'r') as f:
+                                    diagrams[dname] = f.read()
+                            except Exception:
+                                diagrams[dname] = ""
+                        ev = self.add_event(interrupted_phase, "review",
+                            "Architecture Review required",
+                            {"type": "arch_review", "diagrams": diagrams})
+                        await self.broadcast(ev)
                     else:
                         ev = self.add_event(interrupted_phase, "waiting", f"Waiting for user input — {interrupted_phase}", {"type": "review_approval"})
                         await self.broadcast(ev)
@@ -759,15 +851,22 @@ class WorkflowBridge:
                         else:
                             resume_data = {"interview_notes": str(user_input)}
                     elif interrupted_phase == "ARCH_REVIEW":
+                        # Pass user's approval decision and feedback
+                        approved = user_input.get("approved", True)
+                        feedback = user_input.get("feedback", "")
                         resume_data = {
                             "human_approval_required": False,
-                            "arch_review_approved": True,
-                            "diagram_status": "approved",
+                            "arch_review_approved": approved,
+                            "diagram_status": "approved" if approved else "rejected",
+                            "diagram_feedback": feedback,
                         }
                     else:
                         resume_data = {"human_approval_required": False}
 
                     print(f"  → Resuming {interrupted_phase} with Command(resume=...)")
+                    # Resume workflow and update status
+                    self.status = "running"
+                    self.waiting_for = None
                     input_state = Command(resume=resume_data)
                     continue
                 else:
@@ -775,7 +874,8 @@ class WorkflowBridge:
                     if self._last_phase:
                         ev = self.add_event(self._last_phase, "completed", f"{self._last_phase} completed")
                         await self.broadcast(ev)
-                    break
+                    completed = True  # Prevent outer loop from re-entering
+                    break  # break inner loop, then outer loop exits below
 
             # Mark workflow complete
             if not self._aborted:
@@ -786,9 +886,19 @@ class WorkflowBridge:
                 await self.broadcast(ev)
 
         except asyncio.CancelledError:
-            self.status = "idle"
-            self.current_phase = ""
-            self.waiting_for = None
+            # Only reset to idle if we didn't already complete successfully
+            if self.status != "complete":
+                import traceback, sys
+                print(f"[Bridge] CancelledError caught (non-fatal, already completed) — stacktrace:", flush=True)
+                traceback.print_exc()
+                exc_type, exc_value, exc_tb = sys.exc_info()
+                print(f"[Bridge] CancelledError origin: {exc_tb}", flush=True)
+                self.status = "idle"
+                self.current_phase = ""
+                self.waiting_for = None
+            else:
+                # Already marked complete — keep status="complete"
+                print(f"[Bridge] CancelledError ignored (status=complete)", flush=True)
         except Exception as e:
             self.status = "error"
             ev = self.add_event("SYSTEM", "error", f"Workflow failed: {str(e)[:200]}")

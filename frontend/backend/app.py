@@ -165,6 +165,20 @@ async def start_workflow(req: StartRequest):
     bridge._auto_approve = False  # Let the UI flow wait for user input at HIL gates
     bridge._aborted = False
     bridge._run_task = asyncio.create_task(bridge.run_real())
+    # Log exceptions from background task (previously silently swallowed)
+    async def log_task_errors(task):
+        try:
+            await task
+        except BaseException as e:
+            # Don't override status if workflow completed successfully
+            if bridge.status != "complete":
+                import traceback
+                print(f"[APP] Workflow task exception: {type(e).__name__}: {e}", flush=True)
+                traceback.print_exc()
+                bridge.status = "idle"
+                bridge.waiting_for = None
+                bridge.current_phase = None
+    asyncio.create_task(log_task_errors(bridge._run_task))
     return {"status": "started", "cycle": bridge.cycle}
 
 

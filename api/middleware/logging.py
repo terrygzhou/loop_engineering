@@ -1,7 +1,5 @@
 # Loop Engineering — Request/Response Logging Middleware
 
-import time
-import json
 from log.logging import setup_logger, log_event
 
 logger = setup_logger("api")

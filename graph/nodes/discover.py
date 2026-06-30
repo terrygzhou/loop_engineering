@@ -92,12 +92,12 @@ def discover_node(state: dict) -> dict:
     # ── Derive project_folder ──
     project_folder = state.get("project_folder", "")
     if not project_folder:
-        workspace = os.getenv("WORKSPACE_DIR", os.path.expanduser("~/workspace/projects"))
+        workspace = os.getenv("WORKSPACE_DIR", "./output")
         project_folder = os.path.join(workspace, project_name)
         state["project_folder"] = project_folder
     state["project_path"] = project_folder
 
-    # ── Improve mode: load telemetry for context ──
+    # ── Improve mode
     if state.get("improve_mode"):
         telemetry = _load_improve_telemetry(state, project_name)
         if telemetry:

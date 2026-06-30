@@ -135,10 +135,17 @@ async function fetchMetrics() {
 }
 
 async function startWorkflow() {
+  const projectName = document.getElementById('req-project-name')?.value?.trim() || '';
+  const spec = document.getElementById('req-spec')?.value?.trim() || '';
   try {
-    const res = await fetch(`${CONFIG.apiBase}/start`, { method: 'POST' });
+    const res = await fetch(`${CONFIG.apiBase}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_name: projectName, spec }),
+    });
     const data = await res.json();
     console.log('[API] Workflow started:', data);
+    renderAll();
   } catch (err) {
     console.error('[API] Start workflow failed:', err);
   }
@@ -208,11 +215,10 @@ function handleProgressEvent(event) {
     return;
   }
 
-  // Handle workflow abort/error — reset to idle
-  if (event.phase === 'SYSTEM' && event.action === 'error') {
+  // Handle explicit workflow abort — clean reset without error flash
+  if (event.phase === 'SYSTEM' && event.action === 'aborted') {
     state.interviewActive = false;
     state.workflow.status = 'idle';
-    // Reset phase states back to pending
     for (const phaseName in state.phases) {
       state.phases[phaseName] = {
         ...state.phases[phaseName],
@@ -221,16 +227,33 @@ function handleProgressEvent(event) {
         messages: [],
       };
     }
-    // Clear artifact dedup cache and log counter so re-run regenerates display
     state.shownArtifacts = {};
     state.lastRenderedMsgCount = 0;
     renderAll();
     return;
   }
 
-  // Handle skill-driven interview
-  if (event.action === 'interview' && event.data && event.data.questions) {
-    renderInterview(event.phase, event.data.questions);
+  // Handle workflow error (genuine failure) — reset to idle with error styling
+  if (event.phase === 'SYSTEM' && event.action === 'error') {
+    state.interviewActive = false;
+    state.workflow.status = 'error';
+    state.shownArtifacts = {};
+    state.lastRenderedMsgCount = 0;
+    renderAll();
+    return;
+  }
+
+  // Handle skill-driven interview (bridge sends data.fields or data.questions)
+  if (event.action === 'interview' && event.data && (event.data.fields || event.data.questions)) {
+    // Skip duplicate: already showing interview for this phase
+    if (state.interviewActive && state.interviewPhase === event.phase) return;
+    renderInterview(event.phase, event.data.fields || event.data.questions);
+    return;
+  }
+
+  // Handle architecture review with Mermaid diagram rendering
+  if (event.action === 'review' && event.data && event.data.type === 'arch_review') {
+    renderArchReview(event.phase, event.data);
     return;
   }
 
@@ -870,6 +893,117 @@ function renderReview(phase, data) {
   function finishReview() {
     state.interviewActive = false;
     state.interviewPhase = null;
+  }
+}
+
+// ─── Architecture Review with Mermaid Diagram Rendering ──────────
+function renderArchReview(phase, data) {
+  state.interviewActive = true;
+  state.interviewPhase = phase;
+
+  const diagrams = data.diagrams || {};
+  const diagramKeys = Object.keys(diagrams);
+
+  // Build tabbed diagram viewer
+  let tabsHtml = '<div class="diagram-tabs" role="tablist">';
+  diagramKeys.forEach((key, i) => {
+    tabsHtml += `<button class="diagram-tab ${i === 0 ? 'active' : ''}" data-tab="${key}">${key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</button>`;
+  });
+  tabsHtml += '</div>';
+
+  let panelsHtml = '<div class="diagram-panels">';
+  diagramKeys.forEach((key, i) => {
+    const raw = diagrams[key];
+    panelsHtml += `<div class="diagram-panel ${i === 0 ? 'active' : ''}" id="diagram-panel-${key}" data-diagram="${key}">
+      <div class="mermaid-container"><div class="mermaid" id="mermaid-${key}">${raw || 'No diagram generated'}</div></div>
+      <div class="diagram-source-toggle"><button class="btn btn-sm btn-secondary" onclick="toggleSource('${key}')">Toggle Source</button></div>
+      <pre class="diagram-source" id="source-${key}" style="display:none;">${raw || ''}</pre>
+    </div>`;
+  });
+  panelsHtml += '</div>';
+
+  // Review summary
+  const summaryHtml = `
+    <div class="review-summary">
+      <h3>Architecture Review</h3>
+      <p>Review the generated architecture diagrams. Approve to proceed to BUILD, or reject with feedback to loop back to DEFINE.</p>
+    </div>
+  `;
+
+  // Feedback textarea
+  const feedbackHtml = `
+    <div class="review-feedback">
+      <label class="form-label">Comments / Feedback (optional)</label>
+      <textarea class="form-textarea" id="arch-review-feedback" rows="3" placeholder="Notes for the next cycle if rejected..."></textarea>
+    </div>
+  `;
+
+  // Action buttons
+  const actionsHtml = `
+    <div class="review-actions">
+      <button class="btn btn-secondary" id="arch-review-reject">Reject — Loop Back</button>
+      <button class="btn btn-primary" id="arch-review-approve">Approve — Proceed to BUILD</button>
+    </div>
+  `;
+
+  dom.detailTitle.textContent = `${phase} — Architecture Review`;
+  dom.detailContent.innerHTML = tabsHtml + panelsHtml + summaryHtml + feedbackHtml + actionsHtml;
+
+  // Render Mermaid diagrams (async)
+  const renderAll = async () => {
+    for (const key of diagramKeys) {
+      try {
+        const el = document.getElementById(`mermaid-${key}`);
+        if (el && el.textContent.trim() !== 'No diagram generated') {
+          await mermaid.run({nodes: [el]});
+        }
+      } catch (e) {
+        console.error(`Mermaid render failed for ${key}:`, e);
+      }
+    }
+  };
+  renderAll();
+
+  // Tab switching
+  document.querySelectorAll('.diagram-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.diagram-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.diagram-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      const panel = document.getElementById(`diagram-panel-${tab.dataset.tab}`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Approve button
+  document.getElementById('arch-review-approve').addEventListener('click', () => {
+    submitInput(phase, 'arch_review', {
+      approved: true,
+      feedback: document.getElementById('arch-review-feedback').value,
+    });
+    finishInterview();
+    dom.detailTitle.textContent = `${phase} — Approved`;
+    dom.detailContent.innerHTML = '<p class="detail-placeholder">Architecture approved. Workflow will proceed to BUILD phase.</p>';
+  });
+
+  // Reject button
+  document.getElementById('arch-review-reject').addEventListener('click', () => {
+    const feedback = document.getElementById('arch-review-feedback').value || 'No feedback provided';
+    submitInput(phase, 'arch_review', {
+      approved: false,
+      feedback: feedback,
+    });
+    finishInterview();
+    dom.detailTitle.textContent = `${phase} — Rejected`;
+    dom.detailContent.innerHTML = `<p class="detail-placeholder">Architecture rejected with feedback. Workflow will loop back to DEFINE for revisions.</p>`;
+  });
+}
+
+// Toggle diagram source visibility
+function toggleSource(key) {
+  const sourceEl = document.getElementById(`source-${key}`);
+  if (sourceEl) {
+    sourceEl.style.display = sourceEl.style.display === 'none' ? 'block' : 'none';
   }
 }
 

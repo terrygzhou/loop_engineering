@@ -21,6 +21,7 @@ services:
       - skills_data:/root/.hermes/skills
       - build_data:/app/build
       - skill_data:/app/skills
+      - ./output:/app/output
     deploy:
       resources:
         limits:

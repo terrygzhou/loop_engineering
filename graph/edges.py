@@ -99,6 +99,13 @@ def route_phase(state: WorkflowState) -> str:
             return "PLAN"  # Loop back to resolve doubts
         return "ARCH_REVIEW"
 
+    # ARCH_REVIEW -> check user approval
+    if phase == "ARCH_REVIEW":
+        approved = state.get("arch_review_approved", True)
+        if not approved:
+            return "PLAN"  # Loop back for redesign
+        return "BUILD"
+
     # BUILD -> check security and review gates
     if phase == "BUILD":
         if m.security_findings > max_sec_findings:
