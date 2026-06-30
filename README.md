@@ -1,33 +1,38 @@
 # Loop Engineering
 
-![Loop Engineering](image.png)
-
 Self-improving AI-driven software development engine built on LangGraph.
 
 ```
 DISCOVER → DEFINE → PLAN → ARCH_REVIEW → BUILD → SEED_DATA → VERIFY → SHIP → REFLECT
 ```
 
+
+
+
 Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop) review gates, and self-improvement via ChromaDB pattern storage. CLI and Web UI share the same `WorkflowRunner` — identical node execution, different UX layers.
+
+
 
 ## Architecture
 
-<div class="arch-diagram" style="background:#f8f9fa;border:2px solid #dee2e6;border-radius:12px;padding:24px;margin:24px 0;font-family:system-ui,-apple-system,sans-serif">
+<div class="archimate" style="background:#f8f9fa;border:2px solid #dee2e6;border-radius:12px;padding:24px;margin:24px 0;font-family:system-ui,-apple-system,sans-serif">
   <style scoped>
-    .arch-diagram h2,.arch-diagram h3,.arch-diagram h4{margin:0 0 8px 0}
-    .arch-diagram h2{text-align:center;font-size:1.5em}
-    .arch-diagram h3{text-align:center;font-size:1.2em;margin-top:24px}
-    .arch-diagram h4{font-size:1em;margin-bottom:12px}
+    .archimate h2,.archimate h3,.archimate h4,.archimate h5{margin:0 0 8px 0}
+    .archimate h2{text-align:center;font-size:1.5em;margin-bottom:16px}
+    .archimate h3{text-align:center;font-size:1.2em;margin-top:24px}
+    .archimate h4{font-size:1em;margin-bottom:12px}
+    .archimate h5{font-size:0.9em;margin:0}
     .arch-pipeline{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:20px 0}
     .arch-phase{padding:8px 16px;border-radius:20px;font-weight:bold;font-size:0.9em;border:2px solid}
     .arch-phase.phase{background:#e8f5e9;border-color:#4CAF50;color:#1b5e20}
     .arch-phase.hil{background:#fff3e0;border-color:#FF9800;color:#e65100}
     .arch-arrow{color:#666;font-size:1.2em}
-    .arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:20px 0}
+    .arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:20px 0}
     .arch-section{background:white;border-radius:10px;padding:16px;border-left:4px solid;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
-    .arch-node{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:10px;margin:6px 0;font-size:0.9em}
-    .arch-node h4{margin:0 0 4px 0;color:#1a1a2e;font-size:0.95em}
-    .arch-node p{margin:0;color:#666;font-size:0.85em}
+    .arch-component{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:10px;margin:6px 0}
+    .arch-component h5{display:flex;justify-content:space-between;align-items:center}
+    .arch-component .type{font-size:0.75em;color:#666;background:#e8f5e9;padding:2px 6px;border-radius:3px}
+    .arch-component p{margin:0;color:#666;font-size:0.85em}
     .arch-connections{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:20px 0}
     .arch-connection{background:white;border:1px solid #dee2e6;border-radius:8px;padding:14px}
     .arch-connection h4{margin:0 0 10px 0;color:#1a1a2e;font-size:1em}
@@ -44,7 +49,7 @@ Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop)
   </style>
 
   <h2>🔄 Loop Engineering Architecture</h2>
-  <p style="text-align:center;color:#666">Self-improving AI-driven software development engine built on LangGraph with Human-in-the-Loop capabilities</p>
+  <p style="text-align:center;color:#666">Archimate Component View - Self-improving AI-driven software development engine</p>
 
   <h3>📊 Pipeline Flow</h3>
   <div class="arch-pipeline">
@@ -67,74 +72,186 @@ Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop)
   <div class="arch-grid">
     <div class="arch-section" style="border-left-color:#4CAF50">
       <h4>📥 CLI &amp; API Layer</h4>
-      <div class="arch-node"><h4>main.py</h4><p>CLI entry — delegates to WorkflowRunner</p></div>
-      <div class="arch-node"><h4>api/app.py</h4><p>FastAPI application entry point</p></div>
-      <div class="arch-node"><h4>api/routes.py</h4><p>REST endpoints for workflow start/status</p></div>
-      <div class="arch-node"><h4>api/services.py</h4><p>WorkflowService — orchestrates graph execution</p></div>
-      <div class="arch-node"><h4>api/input_manager.py</h4><p>Manages user input for HIL gates</p></div>
+      <div class="arch-component">
+        <h5>CLI Entry <span class="type">Application</span></h5>
+        <p>main.py - CLI entry point</p>
+      </div>
+      <div class="arch-component">
+        <h5>API Gateway <span class="type">Application</span></h5>
+        <p>api/app.py - FastAPI entry</p>
+      </div>
+      <div class="arch-component">
+        <h5>API Routes <span class="type">Application</span></h5>
+        <p>api/routes.py - REST endpoints</p>
+      </div>
+      <div class="arch-component">
+        <h5>API Services <span class="type">Application</span></h5>
+        <p>api/services.py - Workflow service</p>
+      </div>
+      <div class="arch-component">
+        <h5>Input Manager <span class="type">Application</span></h5>
+        <p>api/input_manager.py - HIL input</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#2196F3">
       <h4>🔄 LangGraph Engine</h4>
-      <div class="arch-node"><h4>graph/main.py</h4><p>StateGraph construction + interrupt_after</p></div>
-      <div class="arch-node"><h4>graph/executor.py</h4><p>WorkflowRunner — shared CLI/Web UI executor</p></div>
-      <div class="arch-node"><h4>graph/state.py</h4><p>WorkflowState + CycleMetrics</p></div>
-      <div class="arch-node"><h4>graph/edges.py</h4><p>Conditional routing + quality gates</p></div>
-      <div class="arch-node"><h4>graph/sqlite_saver.py</h4><p>Checkpoint persistence (SQLite)</p></div>
+      <div class="arch-component">
+        <h5>StateGraph <span class="type">Engine</span></h5>
+        <p>graph/main.py - Graph construction</p>
+      </div>
+      <div class="arch-component">
+        <h5>WorkflowRunner <span class="type">Engine</span></h5>
+        <p>graph/executor.py - Shared executor</p>
+      </div>
+      <div class="arch-component">
+        <h5>WorkflowState <span class="type">State</span></h5>
+        <p>graph/state.py - State management</p>
+      </div>
+      <div class="arch-component">
+        <h5>EdgeRouter <span class="type">Engine</span></h5>
+        <p>graph/edges.py - Conditional routing</p>
+      </div>
+      <div class="arch-component">
+        <h5>Checkpoint Saver <span class="type">Storage</span></h5>
+        <p>graph/sqlite_saver.py - Persistence</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#9C27B0">
       <h4>📋 Phase Nodes</h4>
-      <div class="arch-node"><h4>discover.py</h4><p>HIL interview + codebase scan</p></div>
-      <div class="arch-node"><h4>define.py</h4><p>Spec + API contract generation</p></div>
-      <div class="arch-node"><h4>plan.py</h4><p>Architecture plan + task list</p></div>
-      <div class="arch-node"><h4>arch_review.py</h4><p>HIL gate — spec/plan review</p></div>
-      <div class="arch-node"><h4>build.py</h4><p>Code generation + TDD + security</p></div>
-      <div class="arch-node"><h4>seed_data.py</h4><p>Test data fixtures</p></div>
-      <div class="arch-node"><h4>verify.py</h4><p>UAT + performance + debugging</p></div>
-      <div class="arch-node"><h4>ship.py</h4><p>Deploy + observability + git tag</p></div>
-      <div class="arch-node"><h4>reflect.py</h4><p>Cycle analysis + ChromaDB patterns</p></div>
+      <div class="arch-component">
+        <h5>DISCOVER <span class="type">Phase</span></h5>
+        <p>HIL interview + codebase scan</p>
+      </div>
+      <div class="arch-component">
+        <h5>DEFINE <span class="type">Phase</span></h5>
+        <p>Spec + API contract generation</p>
+      </div>
+      <div class="arch-component">
+        <h5>PLAN <span class="type">Phase</span></h5>
+        <p>Architecture + task planning</p>
+      </div>
+      <div class="arch-component">
+        <h5>ARCH_REVIEW <span class="type">HIL</span></h5>
+        <p>Human review gate</p>
+      </div>
+      <div class="arch-component">
+        <h5>BUILD <span class="type">Phase</span></h5>
+        <p>Code generation + TDD</p>
+      </div>
+      <div class="arch-component">
+        <h5>SEED_DATA <span class="type">Phase</span></h5>
+        <p>Test data fixtures</p>
+      </div>
+      <div class="arch-component">
+        <h5>VERIFY <span class="type">Phase</span></h5>
+        <p>UAT + performance testing</p>
+      </div>
+      <div class="arch-component">
+        <h5>SHIP <span class="type">Phase</span></h5>
+        <p>Deploy + observability</p>
+      </div>
+      <div class="arch-component">
+        <h5>REFLECT <span class="type">Phase</span></h5>
+        <p>Self-improvement loop</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#FF9800">
       <h4>🛠 Tools &amp; Skills</h4>
-      <div class="arch-node"><h4>tools/loader.py</h4><p>Skill registry — ~27 SKILL.md files</p></div>
-      <div class="arch-node"><h4>tools/llm.py</h4><p>LLM invocation + skill injection</p></div>
-      <div class="arch-node"><h4>tools/context_manager.py</h4><p>LLM context window optimization</p></div>
-      <div class="arch-node"><h4>tools/audit_logger.py</h4><p>Audit trail for LLM calls</p></div>
-      <div class="arch-node"><h4>tools/distiller.py</h4><p>Response distillation</p></div>
+      <div class="arch-component">
+        <h5>Skill Registry <span class="type">Registry</span></h5>
+        <p>tools/loader.py - ~27 SKILL.md</p>
+      </div>
+      <div class="arch-component">
+        <h5>LLM Client <span class="type">Client</span></h5>
+        <p>tools/llm.py - LLM invocation</p>
+      </div>
+      <div class="arch-component">
+        <h5>Context Manager <span class="type">Manager</span></h5>
+        <p>tools/context_manager.py - Optimization</p>
+      </div>
+      <div class="arch-component">
+        <h5>Audit Logger <span class="type">Logger</span></h5>
+        <p>tools/audit_logger.py - Audit trail</p>
+      </div>
+      <div class="arch-component">
+        <h5>Distiller <span class="type">Processor</span></h5>
+        <p>tools/distiller.py - Response distillation</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#F44336">
       <h4>👤 HIL Frontend</h4>
-      <div class="arch-node"><h4>frontend/backend/app.py</h4><p>FastAPI frontend entry</p></div>
-      <div class="arch-node"><h4>frontend/backend/workflow_bridge.py</h4><p>SSE events + LangGraph resume</p></div>
-      <div class="arch-node"><h4>frontend/backend/abort_manager.py</h4><p>Workflow abort + checkpoint cleanup</p></div>
-      <div class="arch-node"><h4>frontend/static/js/app.js</h4><p>SSE client + Mermaid rendering</p></div>
-      <div class="arch-node"><h4>frontend/static/css/style.css</h4><p>Frontend styling</p></div>
+      <div class="arch-component">
+        <h5>Frontend API <span class="type">API</span></h5>
+        <p>frontend/backend/app.py - FastAPI</p>
+      </div>
+      <div class="arch-component">
+        <h5>Workflow Bridge <span class="type">Bridge</span></h5>
+        <p>frontend/backend/workflow_bridge.py - SSE</p>
+      </div>
+      <div class="arch-component">
+        <h5>Abort Manager <span class="type">Manager</span></h5>
+        <p>frontend/backend/abort_manager.py - Cleanup</p>
+      </div>
+      <div class="arch-component">
+        <h5>Web UI <span class="type">UI</span></h5>
+        <p>frontend/static/js/app.js - Client</p>
+      </div>
+      <div class="arch-component">
+        <h5>Styles <span class="type">UI</span></h5>
+        <p>frontend/static/css/style.css - CSS</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#795548">
       <h4>📊 Feedback Loop</h4>
-      <div class="arch-node"><h4>feedback/aggregator.py</h4><p>Cycle recording + metrics</p></div>
-      <div class="arch-node"><h4>feedback/chroma_client.py</h4><p>Pattern embeddings + similarity search</p></div>
-      <div class="arch-node"><h4>feedback/diff_engine.py</h4><p>Config diff generation</p></div>
+      <div class="arch-component">
+        <h5>Aggregator <span class="type">Processor</span></h5>
+        <p>feedback/aggregator.py - Patterns</p>
+      </div>
+      <div class="arch-component">
+        <h5>Chroma Client <span class="type">Client</span></h5>
+        <p>feedback/chroma_client.py - ChromaDB</p>
+      </div>
+      <div class="arch-component">
+        <h5>Diff Engine <span class="type">Engine</span></h5>
+        <p>feedback/diff_engine.py - Config diffs</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#00BCD4">
       <h4>⚙️ Configuration</h4>
-      <div class="arch-node"><h4>config/config.yaml</h4><p>Three-tier config (env &gt; YAML &gt; defaults)</p></div>
-      <div class="arch-node"><h4>config/loader.py</h4><p>Config resolution logic</p></div>
-      <div class="arch-node"><h4>config/guardrails.yaml</h4><p>Quality thresholds + LLM settings</p></div>
-      <div class="arch-node"><h4>config/guardrails.py</h4><p>Runtime threshold enforcement</p></div>
-      <div class="arch-node"><h4>config/prompt_templates.py</h4><p>Phase-specific LLM prompts</p></div>
+      <div class="arch-component">
+        <h5>Config <span class="type">Config</span></h5>
+        <p>config/config.yaml - Three-tier config</p>
+      </div>
+      <div class="arch-component">
+        <h5>Guardrails <span class="type">Enforcer</span></h5>
+        <p>config/guardrails.py - Thresholds</p>
+      </div>
+      <div class="arch-component">
+        <h5>Prompt Templates <span class="type">Templates</span></h5>
+        <p>config/prompt_templates.py - LLM prompts</p>
+      </div>
     </div>
 
     <div class="arch-section" style="border-left-color:#607D8B">
       <h4>🔧 Services</h4>
-      <div class="arch-node"><h4>service/health.py</h4><p>Health check server</p></div>
-      <div class="arch-node"><h4>service/otel_instrumentor.py</h4><p>OpenTelemetry traces</p></div>
-      <div class="arch-node"><h4>log/logging.py</h4><p>Structured logging</p></div>
+      <div class="arch-component">
+        <h5>Health Check <span class="type">Service</span></h5>
+        <p>service/health.py - Health monitoring</p>
+      </div>
+      <div class="arch-component">
+        <h5>OpenTelemetry <span class="type">Observability</span></h5>
+        <p>service/otel_instrumentor.py - Traces</p>
+      </div>
+      <div class="arch-component">
+        <h5>Structured Logger <span class="type">Logger</span></h5>
+        <p>log/logging.py - Logs</p>
+      </div>
     </div>
   </div>
 
@@ -143,70 +260,53 @@ Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop)
     <div class="arch-connection">
       <h4>🔄 Workflow Execution</h4>
       <ul>
-        <li>CLI → api/services → graph/executor</li>
-        <li>api/routes → WorkflowService</li>
-        <li>graph/main → nodes/*.py</li>
-        <li>nodes → tools/llm → LLM endpoint</li>
+        <li>CLI → API Gateway → LangGraph Engine</li>
+        <li>API Gateway → LangGraph Engine</li>
+        <li>LangGraph → Phase Nodes</li>
+        <li>Phase Nodes → Tools & Skills</li>
       </ul>
     </div>
     <div class="arch-connection">
       <h4>👥 HIL Bridge</h4>
       <ul>
-        <li>DISCOVER → interrupt() → SSE → frontend</li>
-        <li>ARCH_REVIEW → interrupt_after → SSE → frontend</li>
-        <li>frontend → workflow_bridge → resume()</li>
-        <li>frontend → abort_manager → cancel()</li>
+        <li>LangGraph → HIL Frontend (SSE)</li>
+        <li>HIL Frontend → LangGraph (Resume)</li>
+        <li>Phase Nodes → HIL Frontend (Review)</li>
+        <li>HIL Frontend → Phase Nodes (Approvals)</li>
       </ul>
     </div>
     <div class="arch-connection">
       <h4>📊 Feedback Loop</h4>
       <ul>
-        <li>REFLECT → feedback/aggregator</li>
-        <li>aggregator → chroma_client → ChromaDB</li>
-        <li>aggregator → diff_engine → git-workflow</li>
+        <li>Feedback Loop → LangGraph Engine</li>
+        <li>Feedback Loop → Tools & Skills</li>
+        <li>Phase Nodes → Feedback Loop (Patterns)</li>
+        <li>Feedback Loop → Phase Nodes (Patterns)</li>
       </ul>
     </div>
     <div class="arch-connection">
       <h4>🎯 Quality Gates</h4>
       <ul>
-        <li>ARCH_REVIEW: approved → BUILD</li>
-        <li>ARCH_REVIEW: rejected → DEFINE</li>
-        <li>BUILD: pass → SEED_DATA / fail → PLAN</li>
-        <li>VERIFY: pass → SHIP / fail → BUILD</li>
-      </ul>
-    </div>
-    <div class="arch-connection">
-      <h4>🛠 Skills Wiring</h4>
-      <ul>
-        <li>tools/loader → skills/ (27 SKILL.md)</li>
-        <li>DISCOVER → interview-me</li>
-        <li>DEFINE → speckit-specify → api-and-interface-design</li>
-        <li>BUILD → incremental-implementation → tdd → security → code-review</li>
-      </ul>
-    </div>
-    <div class="arch-connection">
-      <h4>🔧 Observability</h4>
-      <ul>
-        <li>service/otel_instrumentor → OpenTelemetry</li>
-        <li>log/logging → structured logs</li>
-        <li>tools/audit_logger → LLM audit trail</li>
+        <li>ARCH_REVIEW approved → BUILD</li>
+        <li>ARCH_REVIEW rejected → DEFINE</li>
+        <li>BUILD pass → SEED_DATA / fail → PLAN</li>
+        <li>VERIFY pass → SHIP / fail → BUILD</li>
       </ul>
     </div>
   </div>
 
   <div class="arch-legend">
-    <div class="arch-legend-item"><div class="arch-color" style="background:#e8f5e9;border-color:#4CAF50"></div>CLI &amp; API</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#e3f2fd;border-color:#2196F3"></div>LangGraph</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#e8f5e9;border-color:#4CAF50"></div>Application</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#e3f2fd;border-color:#2196F3"></div>Engine</div>
     <div class="arch-legend-item"><div class="arch-color" style="background:#f3e5f5;border-color:#9C27B0"></div>Phase Nodes</div>
-    <div class="arch-legend-item"><div class="arch-color" style="background:#fff3e0;border-color:#FF9800"></div>Tools &amp; Skills</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#fff3e0;border-color:#FF9800"></div>Tools & Skills</div>
     <div class="arch-legend-item"><div class="arch-color" style="background:#ffebee;border-color:#F44336"></div>HIL Frontend</div>
     <div class="arch-legend-item"><div class="arch-color" style="background:#fbe9e7;border-color:#795548"></div>Feedback</div>
     <div class="arch-legend-item"><div class="arch-color" style="background:#e0f7fa;border-color:#00BCD4"></div>Configuration</div>
     <div class="arch-legend-item"><div class="arch-color" style="background:#eceff1;border-color:#607D8B"></div>Services</div>
   </div>
 </div>
-
-### Key Components
+## Key Components
 
 - **Entry Points**: CLI (`main.py`) for headless auto-approve, or Web UI (FastAPI `:8011`) for HIL workflow
 - **LangGraph Engine**: `StateGraph` with 10 phase nodes, conditional routing via quality gates, OOTB `interrupt_after` for HIL pauses
@@ -319,60 +419,7 @@ After SHIP, REFLECT:
 
 Low-risk changes (confidence ≥ 0.95, zero security findings) can auto-apply.
 
-## Project Structure
 
-```
-loop_engineering/
-├── main.py                    # CLI entry (delegates input to DISCOVER)
-├── config/
-│   ├── config.yaml           # Three-tier config (env > YAML > defaults)
-│   ├── loader.py            # Config resolution
-│   ├── guardrails.yaml       # Quality thresholds, LLM settings, security rules
-│   ├── guardrails.py         # Runtime threshold loader
-│   └── prompt_templates.py   # LLM prompt templates for each phase
-├── graph/
-│   ├── main.py               # LangGraph construction (node wiring, interrupt_after)
-│   ├── executor.py          # Shared WorkflowRunner (CLI + Web UI)
-│   ├── state.py             # WorkflowState + CycleMetrics
-│   ├── edges.py             # Conditional routing with quality gates
-│   └── nodes/               # Phase implementations
-│       ├── discover.py      # HIL interview + codebase scan + requirement generation
-│       ├── define.py        # Spec + API contract generation
-│       ├── plan.py          # Architecture plan + tasks
-│       ├── architecture.py  # Architecture diagram generation (Mermaid)
-│       ├── arch_review.py   # HIL gate (diagram review via Web UI)
-│       ├── build.py         # Incremental code generation + test + security
-│       ├── seed_data.py     # Test data seeding via Docker
-│       ├── verify.py        # UAT, perf, debugging, simplification
-│       ├── ship.py          # Observability, launch, deploy, git tag
-│       ├── reflect.py       # Cycle analysis + ChromaDB + config diffs
-│       └── review_contract.py  # Shared HIL review contract (CLI & Web UI parity)
-├── feedback/
-│   ├── aggregator.py        # Cycle recording, ChromaDB queries
-│   ├── chroma_client.py     # Pattern embeddings, similarity search
-│   └── diff_engine.py       # Config diff generation
-├── tools/
-│   ├── llm.py               # LLM invocation with skill injection
-│   └── loader.py           # Skill registry builder
-├── skills/                   # 27 SKILL.md files (one per skill)
-├── frontend/                 # Web UI (FastAPI + nginx)
-│   ├── backend/            # FastAPI app, SSE streaming, workflow bridge
-│   │   ├── app.py          # FastAPI entry point
-│   │   ├── workflow_bridge.py  # LangGraph execution bridge + event emission
-│   │   └── abort_manager.py    # Workflow abort/cleanup
-│   ├── static/             # HTML/CSS/JS frontend (Mermaid.js for diagrams)
-│   └── nginx/              # nginx configuration
-├── observability/           # OpenTelemetry collector config + Promtail
-│   └── otel-collector-config.yaml
-├── output/                   # Phase artifacts (./output/<project_name>/)
-├── storage/                 # Persistent cycle data (live.json, cycles/)
-├── specs/                   # Example specs from the workflow
-├── scripts/
-│   └── uat_pipeline.sh     # UAT pipeline helper
-├── docker-compose.yml       # Stack: orchestrator + ChromaDB + OTEL + Phoenix
-├── Dockerfile               # Container image (Python + nginx)
-└── requirements.txt        # Python dependencies
-```
 
 ## Configuration
 
@@ -382,7 +429,7 @@ Key settings in `config.yaml`:
 ```yaml
 paths:
   project_name: test_discover_fix
-  workspace_dir: ~/workspace/projects
+  workspace_dir: ~/your_path/projects
   project_path: '{{project_name}}'
   skills_dir: skills
   storage_dir: ./storage
