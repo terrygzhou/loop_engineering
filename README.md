@@ -6,7 +6,7 @@ Self-improving AI-driven software development engine built on LangGraph.
 DISCOVER → DEFINE → PLAN → ARCH_REVIEW → BUILD → SEED_DATA → VERIFY → SHIP → REFLECT
 ```
 
-
+![UI of a loop](image.png)
 
 
 Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop) review gates, and self-improvement via ChromaDB pattern storage. CLI and Web UI share the same `WorkflowRunner` — identical node execution, different UX layers.
