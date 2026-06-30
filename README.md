@@ -1,5 +1,7 @@
 # Loop Engineering
 
+![Loop Engineering](image.png)
+
 Self-improving AI-driven software development engine built on LangGraph.
 
 ```
