@@ -10,289 +10,197 @@ Each cycle runs through these phases with quality gates, HIL (Human-in-the-Loop)
 
 ## Architecture
 
-<div class="architecture-diagram">
-  <style>
-    .architecture-diagram { 
-      background: #f8f9fa; 
-      padding: 20px; 
-      border-radius: 10px; 
-      margin: 20px 0;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    .diagram-header { text-align: center; margin-bottom: 20px; }
-    .diagram-header h2 { color: #1a1a2e; margin-bottom: 10px; }
-    .diagram-header p { color: #666; font-size: 1.1em; }
-    
-    .pipeline { 
-      display: flex; 
-      flex-wrap: wrap; 
-      justify-content: center; 
-      gap: 10px; 
-      margin: 20px 0;
-      align-items: center;
-    }
-    .phase { 
-      background: #e8f5e9; 
-      border: 2px solid #4CAF50; 
-      border-radius: 20px; 
-      padding: 8px 15px; 
-      font-weight: bold; 
-      font-size: 0.9em;
-      text-align: center;
-    }
-    .phase.hil { 
-      background: #fff3e0; 
-      border-color: #FF9800; 
-    }
-    .arrow { color: #666; font-size: 1.2em; }
-    .decision { 
-      background: #ffebee; 
-      border-color: #F44336; 
-      border-radius: 20px; 
-      padding: 5px 10px; 
-      font-size: 0.8em;
-      display: inline-block;
-      margin: 0 10px;
-    }
-    
-    .diagram-grid { 
-      display: grid; 
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-      gap: 15px; 
-      margin: 20px 0;
-    }
-    .section { 
-      background: white; 
-      border-radius: 10px; 
-      padding: 15px; 
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      border-left: 4px solid;
-    }
-    .section h3 { 
-      color: #1a1a2e; 
-      margin-bottom: 10px; 
-      border-bottom: 2px solid #f8f9fa; 
-      padding-bottom: 5px; 
-    }
-    .node { 
-      background: #f8f9fa; 
-      border: 1px solid #dee2e6; 
-      border-radius: 6px; 
-      padding: 10px; 
-      margin-bottom: 8px; 
-      font-size: 0.85em;
-    }
-    .node h4 { margin: 0 0 5px 0; color: #1a1a2e; font-size: 1em; }
-    .node p { margin: 0; color: #666; font-size: 0.9em; }
-    
-    .entry { border-left-color: #4CAF50; }
-    .workflow { border-left-color: #2196F3; }
-    .phase-section { border-left-color: #9C27B0; }
-    .skills { border-left-color: #FF9800; }
-    .hil-section { border-left-color: #F44336; }
-    .frontend { border-left-color: #00BCD4; }
-    .feedback { border-left-color: #795548; }
-    .docker { border-left-color: #607D8B; }
-    
-    .connections { margin: 20px 0; }
-    .connection { 
-      background: white; 
-      border: 1px solid #dee2e6; 
-      border-radius: 8px; 
-      padding: 12px; 
-      margin-bottom: 10px;
-    }
-    .connection h4 { margin: 0 0 8px 0; color: #1a1a2e; }
-    .connection ul { list-style: none; padding: 0; margin: 0; }
-    .connection li { 
-      padding: 4px 0; 
-      font-size: 0.85em; 
-      color: #666; 
-      border-bottom: 1px solid #f8f9fa;
-    }
-    .connection li:last-child { border-bottom: none; }
-    
-    .legend { 
-      background: white; 
-      padding: 15px; 
-      border-radius: 8px; 
-      margin-top: 20px;
-      border: 1px solid #dee2e6;
-    }
-    .legend h4 { margin: 0 0 10px 0; color: #1a1a2e; }
-    .legend-items { display: flex; flex-wrap: wrap; gap: 10px; }
-    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.8em; }
-    .color { 
-      width: 15px; 
-      height: 15px; 
-      border-radius: 3px; 
-      border: 2px solid;
-    }
+<div class="arch-diagram" style="background:#f8f9fa;border:2px solid #dee2e6;border-radius:12px;padding:24px;margin:24px 0;font-family:system-ui,-apple-system,sans-serif">
+  <style scoped>
+    .arch-diagram h2,.arch-diagram h3,.arch-diagram h4{margin:0 0 8px 0}
+    .arch-diagram h2{text-align:center;font-size:1.5em}
+    .arch-diagram h3{text-align:center;font-size:1.2em;margin-top:24px}
+    .arch-diagram h4{font-size:1em;margin-bottom:12px}
+    .arch-pipeline{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:20px 0}
+    .arch-phase{padding:8px 16px;border-radius:20px;font-weight:bold;font-size:0.9em;border:2px solid}
+    .arch-phase.phase{background:#e8f5e9;border-color:#4CAF50;color:#1b5e20}
+    .arch-phase.hil{background:#fff3e0;border-color:#FF9800;color:#e65100}
+    .arch-arrow{color:#666;font-size:1.2em}
+    .arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:20px 0}
+    .arch-section{background:white;border-radius:10px;padding:16px;border-left:4px solid;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+    .arch-node{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:10px;margin:6px 0;font-size:0.9em}
+    .arch-node h4{margin:0 0 4px 0;color:#1a1a2e;font-size:0.95em}
+    .arch-node p{margin:0;color:#666;font-size:0.85em}
+    .arch-connections{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:20px 0}
+    .arch-connection{background:white;border:1px solid #dee2e6;border-radius:8px;padding:14px}
+    .arch-connection h4{margin:0 0 10px 0;color:#1a1a2e;font-size:1em}
+    .arch-connection ul{list-style:none;padding:0;margin:0}
+    .arch-connection li{padding:4px 0;font-size:0.85em;color:#666;border-bottom:1px solid #f8f9fa}
+    .arch-connection li:last-child{border-bottom:none}
+    .arch-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+    .arch-legend-item{display:flex;align-items:center;gap:5px;font-size:0.8em;color:#666}
+    .arch-color{width:16px;height:16px;border-radius:3px;border:2px solid}
+    .arch-decision{text-align:center;margin:12px 0}
+    .arch-decision span{display:inline-block;padding:6px 14px;border-radius:20px;font-size:0.85em;margin:0 8px;font-weight:600}
+    .arch-decision .approved{background:#e8f5e9;border:2px solid #4CAF50;color:#1b5e20}
+    .arch-decision .rejected{background:#ffebee;border:2px solid #F44336;color:#b71c1c}
   </style>
 
-  <div class="diagram-header">
-    <h2>🔄 Loop Engineering Architecture</h2>
-    <p>Self-improving AI-driven software development engine built on LangGraph with Human-in-the-Loop capabilities</p>
-  </div>
+  <h2>🔄 Loop Engineering Architecture</h2>
+  <p style="text-align:center;color:#666">Self-improving AI-driven software development engine built on LangGraph with Human-in-the-Loop capabilities</p>
 
   <h3>📊 Pipeline Flow</h3>
-  <div class="pipeline">
-    <div class="phase">DISCOVER</div>
-    <div class="arrow">→</div>
-    <div class="phase">DEFINE</div>
-    <div class="arrow">→</div>
-    <div class="phase">PLAN</div>
-    <div class="arrow">→</div>
-    <div class="phase hil">ARCH_REVIEW</div>
-    <div class="arrow">→</div>
-    <div class="phase">BUILD</div>
-    <div class="arrow">→</div>
-    <div class="phase">SEED_DATA</div>
-    <div class="arrow">→</div>
-    <div class="phase">VERIFY</div>
-    <div class="arrow">→</div>
-    <div class="phase">SHIP</div>
-    <div class="arrow">→</div>
-    <div class="phase">REFLECT</div>
+  <div class="arch-pipeline">
+    <div class="arch-phase phase">DISCOVER</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">DEFINE</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">PLAN</div><div class="arch-arrow">→</div>
+    <div class="arch-phase hil">ARCH_REVIEW</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">BUILD</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">SEED_DATA</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">VERIFY</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">SHIP</div><div class="arch-arrow">→</div>
+    <div class="arch-phase phase">REFLECT</div>
   </div>
-  <div style="text-align: center; margin: 15px 0;">
-    <span class="decision" style="background: #e8f5e9; border-color: #4CAF50;">✅ Approved → Next Phase</span>
-    <span class="decision">❌ Rejected → Loop Back</span>
+  <div class="arch-decision">
+    <span class="approved">✅ Approved → Next Phase</span>
+    <span class="rejected">❌ Rejected → Loop Back</span>
   </div>
 
-  <div class="diagram-grid">
-    <div class="section entry">
-      <h3>📥 Entry Points</h3>
-      <div class="node"><h4>main.py</h4><p>CLI Entry (headless)</p></div>
-      <div class="node"><h4>app.py</h4><p>FastAPI :8011 (Web UI)</p></div>
+  <h3>📦 Component Architecture</h3>
+  <div class="arch-grid">
+    <div class="arch-section" style="border-left-color:#4CAF50">
+      <h4>📥 CLI &amp; API Layer</h4>
+      <div class="arch-node"><h4>main.py</h4><p>CLI entry — delegates to WorkflowRunner</p></div>
+      <div class="arch-node"><h4>api/app.py</h4><p>FastAPI application entry point</p></div>
+      <div class="arch-node"><h4>api/routes.py</h4><p>REST endpoints for workflow start/status</p></div>
+      <div class="arch-node"><h4>api/services.py</h4><p>WorkflowService — orchestrates graph execution</p></div>
+      <div class="arch-node"><h4>api/input_manager.py</h4><p>Manages user input for HIL gates</p></div>
     </div>
 
-    <div class="section workflow">
-      <h3>🔄 LangGraph Engine</h3>
-      <div class="node"><h4>state.py</h4><p>WorkflowState</p></div>
-      <div class="node"><h4>main.py</h4><p>StateGraph + interrupt_after</p></div>
-      <div class="node"><h4>executor.py</h4><p>WorkflowRunner</p></div>
-      <div class="node"><h4>edges.py</h4><p>Conditional Routing + Quality Gates</p></div>
+    <div class="arch-section" style="border-left-color:#2196F3">
+      <h4>🔄 LangGraph Engine</h4>
+      <div class="arch-node"><h4>graph/main.py</h4><p>StateGraph construction + interrupt_after</p></div>
+      <div class="arch-node"><h4>graph/executor.py</h4><p>WorkflowRunner — shared CLI/Web UI executor</p></div>
+      <div class="arch-node"><h4>graph/state.py</h4><p>WorkflowState + CycleMetrics</p></div>
+      <div class="arch-node"><h4>graph/edges.py</h4><p>Conditional routing + quality gates</p></div>
+      <div class="arch-node"><h4>graph/sqlite_saver.py</h4><p>Checkpoint persistence (SQLite)</p></div>
     </div>
 
-    <div class="section phase-section">
-      <h3>📦 Phase Nodes</h3>
-      <div class="node"><h4>DISCOVER</h4><p>HIL interview + codebase scan</p></div>
-      <div class="node"><h4>DEFINE</h4><p>Spec + API contract</p></div>
-      <div class="node"><h4>PLAN</h4><p>Architecture + tasks</p></div>
-      <div class="node"><h4>ARCH_REVIEW</h4><p>Human review gate</p></div>
-      <div class="node"><h4>BUILD</h4><p>Code generation + tests</p></div>
-      <div class="node"><h4>SEED_DATA</h4><p>Test data fixtures</p></div>
-      <div class="node"><h4>VERIFY</h4><p>UAT + performance</p></div>
-      <div class="node"><h4>SHIP</h4><p>Deploy + git tag</p></div>
-      <div class="node"><h4>REFLECT</h4><p>Self-improvement loop</p></div>
+    <div class="arch-section" style="border-left-color:#9C27B0">
+      <h4>📋 Phase Nodes</h4>
+      <div class="arch-node"><h4>discover.py</h4><p>HIL interview + codebase scan</p></div>
+      <div class="arch-node"><h4>define.py</h4><p>Spec + API contract generation</p></div>
+      <div class="arch-node"><h4>plan.py</h4><p>Architecture plan + task list</p></div>
+      <div class="arch-node"><h4>arch_review.py</h4><p>HIL gate — spec/plan review</p></div>
+      <div class="arch-node"><h4>build.py</h4><p>Code generation + TDD + security</p></div>
+      <div class="arch-node"><h4>seed_data.py</h4><p>Test data fixtures</p></div>
+      <div class="arch-node"><h4>verify.py</h4><p>UAT + performance + debugging</p></div>
+      <div class="arch-node"><h4>ship.py</h4><p>Deploy + observability + git tag</p></div>
+      <div class="arch-node"><h4>reflect.py</h4><p>Cycle analysis + ChromaDB patterns</p></div>
     </div>
 
-    <div class="section skills">
-      <h3>🛠 Skills System</h3>
-      <div class="node"><h4>tools/loader.py</h4><p>~27 SKILL.md files</p></div>
-      <div class="node"><h4>tools/llm.py</h4><p>invoke_skill() + context optimization</p></div>
+    <div class="arch-section" style="border-left-color:#FF9800">
+      <h4>🛠 Tools &amp; Skills</h4>
+      <div class="arch-node"><h4>tools/loader.py</h4><p>Skill registry — ~27 SKILL.md files</p></div>
+      <div class="arch-node"><h4>tools/llm.py</h4><p>LLM invocation + skill injection</p></div>
+      <div class="arch-node"><h4>tools/context_manager.py</h4><p>LLM context window optimization</p></div>
+      <div class="arch-node"><h4>tools/audit_logger.py</h4><p>Audit trail for LLM calls</p></div>
+      <div class="arch-node"><h4>tools/distiller.py</h4><p>Response distillation</p></div>
     </div>
 
-    <div class="section hil-section">
-      <h3>👤 HIL Bridges</h3>
-      <div class="node"><h4>workflow_bridge.py</h4><p>SSE Event Emission + LangGraph Resume</p></div>
-      <div class="node"><h4>abort_manager.py</h4><p>Clean Shutdown + Checkpoint Cleanup</p></div>
+    <div class="arch-section" style="border-left-color:#F44336">
+      <h4>👤 HIL Frontend</h4>
+      <div class="arch-node"><h4>frontend/backend/app.py</h4><p>FastAPI frontend entry</p></div>
+      <div class="arch-node"><h4>frontend/backend/workflow_bridge.py</h4><p>SSE events + LangGraph resume</p></div>
+      <div class="arch-node"><h4>frontend/backend/abort_manager.py</h4><p>Workflow abort + checkpoint cleanup</p></div>
+      <div class="arch-node"><h4>frontend/static/js/app.js</h4><p>SSE client + Mermaid rendering</p></div>
+      <div class="arch-node"><h4>frontend/static/css/style.css</h4><p>Frontend styling</p></div>
     </div>
 
-    <div class="section frontend">
-      <h3>🖥 Web UI Frontend</h3>
-      <div class="node"><h4>app.js</h4><p>SSE Client + Mermaid Rendering</p></div>
-      <div class="node"><h4>index.html</h4><p>UI + Mermaid.js CDN</p></div>
+    <div class="arch-section" style="border-left-color:#795548">
+      <h4>📊 Feedback Loop</h4>
+      <div class="arch-node"><h4>feedback/aggregator.py</h4><p>Cycle recording + metrics</p></div>
+      <div class="arch-node"><h4>feedback/chroma_client.py</h4><p>Pattern embeddings + similarity search</p></div>
+      <div class="arch-node"><h4>feedback/diff_engine.py</h4><p>Config diff generation</p></div>
     </div>
 
-    <div class="section feedback">
-      <h3>📊 Self-Improvement Loop</h3>
-      <div class="node"><h4>aggregator.py</h4><p>Cycle Recording</p></div>
-      <div class="node"><h4>chroma_client.py</h4><p>Pattern Embeddings + Similarity Search</p></div>
-      <div class="node"><h4>diff_engine.py</h4><p>Config Diff Generation</p></div>
-      <div class="node"><h4>ChromaDB</h4><p>Historical Patterns Storage</p></div>
+    <div class="arch-section" style="border-left-color:#00BCD4">
+      <h4>⚙️ Configuration</h4>
+      <div class="arch-node"><h4>config/config.yaml</h4><p>Three-tier config (env &gt; YAML &gt; defaults)</p></div>
+      <div class="arch-node"><h4>config/loader.py</h4><p>Config resolution logic</p></div>
+      <div class="arch-node"><h4>config/guardrails.yaml</h4><p>Quality thresholds + LLM settings</p></div>
+      <div class="arch-node"><h4>config/guardrails.py</h4><p>Runtime threshold enforcement</p></div>
+      <div class="arch-node"><h4>config/prompt_templates.py</h4><p>Phase-specific LLM prompts</p></div>
     </div>
 
-    <div class="section docker">
-      <h3>🐳 Docker Stack</h3>
-      <div class="node"><h4>loop container</h4><p>Python + FastAPI + nginx</p></div>
-      <div class="node"><h4>docker-compose.yml</h4><p>loop + chroma + otel</p></div>
+    <div class="arch-section" style="border-left-color:#607D8B">
+      <h4>🔧 Services</h4>
+      <div class="arch-node"><h4>service/health.py</h4><p>Health check server</p></div>
+      <div class="arch-node"><h4>service/otel_instrumentor.py</h4><p>OpenTelemetry traces</p></div>
+      <div class="arch-node"><h4>log/logging.py</h4><p>Structured logging</p></div>
     </div>
   </div>
 
-  <div class="connections">
-    <h3>🔗 Data Flow Connections</h3>
-    <div class="connection">
-      <h4>🔄 Pipeline Flow</h4>
+  <h3>🔗 Data Flow</h3>
+  <div class="arch-connections">
+    <div class="arch-connection">
+      <h4>🔄 Workflow Execution</h4>
       <ul>
-        <li>DISCOVER → DEFINE → PLAN</li>
-        <li>PLAN → ARCH_REVIEW → BUILD</li>
-        <li>BUILD → SEED_DATA → VERIFY</li>
-        <li>VERIFY → SHIP → REFLECT</li>
+        <li>CLI → api/services → graph/executor</li>
+        <li>api/routes → WorkflowService</li>
+        <li>graph/main → nodes/*.py</li>
+        <li>nodes → tools/llm → LLM endpoint</li>
       </ul>
     </div>
-    <div class="connection">
-      <h4>🎯 Quality Gates</h4>
+    <div class="arch-connection">
+      <h4>👥 HIL Bridge</h4>
       <ul>
-        <li>ARCH_REVIEW approved → BUILD</li>
-        <li>ARCH_REVIEW rejected → DEFINE</li>
-        <li>BUILD pass → SEED_DATA</li>
-        <li>BUILD fail → PLAN (retry)</li>
-        <li>VERIFY pass → SHIP</li>
-        <li>VERIFY fail → BUILD (retry)</li>
+        <li>DISCOVER → interrupt() → SSE → frontend</li>
+        <li>ARCH_REVIEW → interrupt_after → SSE → frontend</li>
+        <li>frontend → workflow_bridge → resume()</li>
+        <li>frontend → abort_manager → cancel()</li>
       </ul>
     </div>
-    <div class="connection">
-      <h4>👤 HIL Bridges</h4>
-      <ul>
-        <li>DISCOVER → interrupt() double-pause</li>
-        <li>ARCH_REVIEW → interrupt_after</li>
-        <li>Bridge → SSE Events → Frontend</li>
-        <li>Frontend → Review Input → Bridge</li>
-      </ul>
-    </div>
-    <div class="connection">
-      <h4>🛠 Skills Wiring</h4>
-      <ul>
-        <li>DISCOVER → SkillReg → LLMTool</li>
-        <li>DEFINE → SkillReg → LLMTool</li>
-        <li>PLAN → SkillReg → LLMTool</li>
-        <li>BUILD → SkillReg → LLMTool</li>
-      </ul>
-    </div>
-    <div class="connection">
+    <div class="arch-connection">
       <h4>📊 Feedback Loop</h4>
       <ul>
-        <li>REFLECT → Aggregator → ChromaClient</li>
-        <li>ChromaClient → ChromaDB (patterns)</li>
-        <li>Aggregator → DiffEngine → git-workflow</li>
-        <li>Executor → OTel traces → OpenTelemetry</li>
+        <li>REFLECT → feedback/aggregator</li>
+        <li>aggregator → chroma_client → ChromaDB</li>
+        <li>aggregator → diff_engine → git-workflow</li>
       </ul>
     </div>
-    <div class="connection">
-      <h4>🚀 Deployment</h4>
+    <div class="arch-connection">
+      <h4>🎯 Quality Gates</h4>
       <ul>
-        <li>CLI → Executor → Graph</li>
-        <li>WebUI → Bridge → Executor</li>
-        <li>Bridge ↔ AbortMgr (cleanup)</li>
-        <li>Docker: loop + chroma + otel</li>
+        <li>ARCH_REVIEW: approved → BUILD</li>
+        <li>ARCH_REVIEW: rejected → DEFINE</li>
+        <li>BUILD: pass → SEED_DATA / fail → PLAN</li>
+        <li>VERIFY: pass → SHIP / fail → BUILD</li>
+      </ul>
+    </div>
+    <div class="arch-connection">
+      <h4>🛠 Skills Wiring</h4>
+      <ul>
+        <li>tools/loader → skills/ (27 SKILL.md)</li>
+        <li>DISCOVER → interview-me</li>
+        <li>DEFINE → speckit-specify → api-and-interface-design</li>
+        <li>BUILD → incremental-implementation → tdd → security → code-review</li>
+      </ul>
+    </div>
+    <div class="arch-connection">
+      <h4>🔧 Observability</h4>
+      <ul>
+        <li>service/otel_instrumentor → OpenTelemetry</li>
+        <li>log/logging → structured logs</li>
+        <li>tools/audit_logger → LLM audit trail</li>
       </ul>
     </div>
   </div>
 
-  <div class="legend">
-    <h4>🎨 Legend</h4>
-    <div class="legend-items">
-      <div class="legend-item"><div class="color" style="background: #e8f5e9; border-color: #4CAF50;"></div>Entry Points</div>
-      <div class="legend-item"><div class="color" style="background: #e3f2fd; border-color: #2196F3;"></div>LangGraph Engine</div>
-      <div class="legend-item"><div class="color" style="background: #f3e5f5; border-color: #9C27B0;"></div>Phase Nodes</div>
-      <div class="legend-item"><div class="color" style="background: #fff3e0; border-color: #FF9800;"></div>Skills System</div>
-      <div class="legend-item"><div class="color" style="background: #ffebee; border-color: #F44336;"></div>HIL Bridges</div>
-      <div class="legend-item"><div class="color" style="background: #e0f7fa; border-color: #00BCD4;"></div>Frontend</div>
-      <div class="legend-item"><div class="color" style="background: #fbe9e7; border-color: #795548;"></div>Feedback Loop</div>
-      <div class="legend-item"><div class="color" style="background: #eceff1; border-color: #607D8B;"></div>Docker Stack</div>
-    </div>
+  <div class="arch-legend">
+    <div class="arch-legend-item"><div class="arch-color" style="background:#e8f5e9;border-color:#4CAF50"></div>CLI &amp; API</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#e3f2fd;border-color:#2196F3"></div>LangGraph</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#f3e5f5;border-color:#9C27B0"></div>Phase Nodes</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#fff3e0;border-color:#FF9800"></div>Tools &amp; Skills</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#ffebee;border-color:#F44336"></div>HIL Frontend</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#fbe9e7;border-color:#795548"></div>Feedback</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#e0f7fa;border-color:#00BCD4"></div>Configuration</div>
+    <div class="arch-legend-item"><div class="arch-color" style="background:#eceff1;border-color:#607D8B"></div>Services</div>
   </div>
 </div>
 
