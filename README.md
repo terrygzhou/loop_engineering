@@ -121,7 +121,7 @@ flowchart TB
     classDef deploy fill:#fce4ec,stroke:#c2185b,stroke-width:2px
     
     class DISCOVER,DEFINE,PLAN,ARCH_REVIEW,BUILD,SEED,VERIFY,SHIP,REFLECT phase
-    class ARCH_REVIEW,Bridge AbortMgr hil
+    class ARCH_REVIEW,Bridge,AbortMgr hil
     class SkillReg,LLMTool skill
     class ChromaDB storage
     class LoopC,Compose deploy
