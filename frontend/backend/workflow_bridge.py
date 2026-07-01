@@ -699,8 +699,14 @@ class WorkflowBridge:
                             chunk = next_task.result()
                             chunk_count += 1
                         except StopAsyncIteration:
-                            print("[Bridge] StopAsyncIteration", flush=True)
-                            break  # stream exhausted (normal completion)
+                            # When arch_review_node calls interrupt(), the stream ends with StopAsyncIteration.
+                            # This IS the interrupt signal — treat it as such when ARCH_REVIEW just ran.
+                            if self.current_phase == "ARCH_REVIEW":
+                                interrupted_chunk = {"__interrupt__": "arch_review", "phase": "ARCH_REVIEW"}
+                                print("[Bridge] Interrupt via StopAsyncIteration at ARCH_REVIEW", flush=True)
+                            else:
+                                print("[Bridge] StopAsyncIteration (no interrupt)", flush=True)
+                                break  # stream exhausted (normal completion)
                     else:
                         # Both completed (rare) — re-loop
                         print("[Bridge] both tasks completed (rare)", flush=True)
@@ -710,7 +716,6 @@ class WorkflowBridge:
                     if "__interrupt__" in chunk:
                         print(f"  → Interrupt detected in chunk: {chunk['__interrupt__']}")
                         interrupted_chunk = chunk
-                        break
 
                     phase = chunk.get("phase", "UNKNOWN")
                     artifacts = chunk.get("artifacts", {})
