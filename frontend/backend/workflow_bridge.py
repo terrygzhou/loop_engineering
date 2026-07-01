@@ -266,7 +266,7 @@ class WorkflowBridge:
         # Resolve project root — try multiple locations for local vs Docker
         candidates = [
             Path(__file__).resolve().parent.parent.parent,  # local: ../.. from backend/
-            Path("/loop_engineering"),                        # Docker volume mount
+            Path("/loop_factory"),                        # Docker volume mount
         ]
         project_root = None
         for candidate in candidates:
@@ -424,35 +424,31 @@ class WorkflowBridge:
         )
         await self.broadcast(ev)
 
+    _review_contract: Optional[Any] = None  # type: ignore[misc]
+
     async def _send_review(self, phase: str, chunk: dict):
         """Send full DEFINE output to the UI for human review.
 
         Uses the shared review_contract to build identical section payloads
         as the CLI executor — same keys, labels, content, and word counts.
         """
-        import importlib.util
-        from pathlib import Path
-        # Load review_contract directly, bypassing graph/nodes/__init__.py which
-        # triggers human_review_node import chain that requires 'graph' as top-level pkg
-        # Resolve the same way as _try_import_real — try local then Docker mount
-        _rc_candidates = [
-            Path(__file__).resolve().parent.parent.parent / "graph" / "nodes" / "review_contract.py",  # local
-            Path("/loop_engineering/graph/nodes/review_contract.py"),                                # Docker
-        ]
-        _rc_path = None
-        for c in _rc_candidates:
-            if c.exists():
-                _rc_path = c
-                break
-        if not _rc_path:
-            raise FileNotFoundError(f"Cannot find review_contract.py in {_rc_candidates}")
-        _spec = importlib.util.spec_from_file_location("review_contract", _rc_path)
-        _mod = importlib.util.module_from_spec(_spec)
-        _spec.loader.exec_module(_mod)
-        # CRITICAL: Register in sys.modules so dataclass serialization (Pydantic/msgpack)
-        # can find cls.__module__ → sys.modules[module] → __dict__ for field introspection.
-        # Without this, SectionFeedback raises AttributeError: 'NoneType' has no '__dict__'.
-        sys.modules["review_contract"] = _mod
+        # Lazy-load review_contract once (cached per instance)
+        if self._review_contract is None:
+            import importlib.util
+            from pathlib import Path
+            _rc_candidates = [
+                Path(__file__).resolve().parent.parent.parent / "graph" / "nodes" / "review_contract.py",
+                Path("/loop_factory/graph/nodes/review_contract.py"),
+            ]
+            _rc_path = next((c for c in _rc_candidates if c.exists()), None)
+            if not _rc_path:
+                raise FileNotFoundError(f"Cannot find review_contract.py in {_rc_candidates}")
+            _spec = importlib.util.spec_from_file_location("review_contract", _rc_path)
+            _mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            sys.modules["review_contract"] = _mod
+            self._review_contract = _mod
+        _mod = self._review_contract
         build_review_sections = _mod.build_review_sections
         build_review_summary = _mod.build_review_summary
         build_review_metrics = _mod.build_review_metrics
@@ -706,16 +702,18 @@ class WorkflowBridge:
                                 print("[Bridge] Interrupt via StopAsyncIteration at ARCH_REVIEW", flush=True)
                             else:
                                 print("[Bridge] StopAsyncIteration (no interrupt)", flush=True)
-                                break  # stream exhausted (normal completion)
+                            break  # Exit inner loop — prevents infinite loop + allows abort signal
                     else:
                         # Both completed (rare) — re-loop
                         print("[Bridge] both tasks completed (rare)", flush=True)
                         continue
 
+                    # ── Process chunk (only reached when chunk arrived normally) ──
                     # Check for interrupt signal in chunk (LangGraph yields __interrupt__ on suspend)
                     if "__interrupt__" in chunk:
                         print(f"  → Interrupt detected in chunk: {chunk['__interrupt__']}")
                         interrupted_chunk = chunk
+                        break
 
                     phase = chunk.get("phase", "UNKNOWN")
                     artifacts = chunk.get("artifacts", {})

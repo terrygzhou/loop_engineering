@@ -67,11 +67,29 @@ def load_guardrails() -> Dict[str, Any]:
     }
 
 
+# ── Cached config (reloaded only when file changes) ──
+_cache: Dict[str, Any] = {}
+_cache_mtime: float = 0.0
+
+
+def _get_cache() -> Dict[str, Any]:
+    """Return cached guardrails, reloading from disk only when the file changed."""
+    global _cache, _cache_mtime
+    path = _resolve_path()
+    try:
+        mtime = Path(path).stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    if not _cache or mtime != _cache_mtime:
+        _cache = load_guardrails()
+        _cache_mtime = mtime
+    return _cache
+
+
 def get_threshold(name: str, default=None) -> Any:
     """Get a single quality threshold, falling back to built-in default."""
     if default is None:
         default = _DEFAULTS.get(name)
     if default is None:
         raise KeyError(f"Unknown threshold: {name!r}")
-    gr = load_guardrails()
-    return gr["quality_thresholds"].get(name, default)
+    return _get_cache()["quality_thresholds"].get(name, default)

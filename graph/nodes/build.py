@@ -322,9 +322,8 @@ def build_node(state: dict) -> dict:
                 item_errors.append(f"Item {item['id']}: Container start failed")
                 continue
 
-            # Health check
-            import time
-            time.sleep(5)
+            # Health check (use subprocess sleep to avoid blocking the event loop)
+            subprocess.run(["sleep", "5"], timeout=10)
             _health_url = os.getenv("PRODUCT_URL", "http://localhost:8010") + "/"
             rc, health_out, _ = run_command(
                 f"curl -s -o /dev/null -w '%{{http_code}}' {_health_url}",

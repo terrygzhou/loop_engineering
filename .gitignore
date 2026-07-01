@@ -27,7 +27,7 @@ test_imports.py
 # Storage
 storage/
 
-# Local project artifacts (not part of loop_engineering repo)
+# Local project artifacts (not part of loop_factory repo)
 MyWords/
 
 # Local-generated artifacts (not committed)

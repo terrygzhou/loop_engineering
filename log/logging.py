@@ -5,7 +5,7 @@ import os
 import sys
 
 
-def setup_logger(name: str = "loop_engineering") -> logging.Logger:
+def setup_logger(name: str = "loop_factory") -> logging.Logger:
     """Configure JSON logger. Idempotent — safe to call multiple times."""
     logger = logging.getLogger(name)
     if logger.handlers:

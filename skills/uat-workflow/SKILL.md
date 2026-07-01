@@ -292,7 +292,7 @@ open('/tmp/uat_browser.py', 'w').write(s)
 python /tmp/uat_browser.py
 ```
 
-#### 7C. Parse results for loop_engineering integration
+#### 7C. Parse results for loop_factory integration
 
 The script's output (passed/failed counts) feeds into `CycleMetrics.uat_pass_rate`:
 ```

@@ -1,4 +1,6 @@
-# Loop Engineering
+# Loop Factory
+
+AI agent-driven loop-engineering factory to produce software products with minimal human intervention.
 
 Self-improving AI-driven software development engine built on LangGraph.
 

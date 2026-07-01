@@ -1,6 +1,6 @@
 # Skills
 
-Self-contained skills for the loop_engineering workflow. Each directory contains a `SKILL.md` with YAML frontmatter and markdown body.
+Self-contained skills for the loop_factory workflow. Each directory contains a `SKILL.md` with YAML frontmatter and markdown body.
 
 ## Skills by Phase
 

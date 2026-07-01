@@ -128,7 +128,7 @@ def _generate_all_diagrams(skills: dict, state: dict) -> dict[str, str]:
 
 
 def _convert_diagrams_to_png(diagrams: dict[str, str]) -> dict[str, str]:
-    """Convert .mmd diagrams to PNG for UI rendering."""
+    """Convert .mmd diagrams to PNG for UI rendering (single browser session)."""
     import asyncio
     import os
     import sys as _sys
@@ -137,7 +137,8 @@ def _convert_diagrams_to_png(diagrams: dict[str, str]) -> dict[str, str]:
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent.parent))
     from tools.convert_diagrams import extract_mermaid, make_html
 
-    png_paths = {}
+    # Collect all (type, html_path, png_path) tuples first
+    conversions = []
     for dtype, mmd_path_str in diagrams.items():
         mmd_path = Path(mmd_path_str)
         if not mmd_path.exists():
@@ -147,23 +148,39 @@ def _convert_diagrams_to_png(diagrams: dict[str, str]) -> dict[str, str]:
             content = mmd_path.read_text()
             mermaid_content = extract_mermaid(content)
             tmp_html_path = make_html(mermaid_content)
-
-            async def _convert(tmp: str, out: _Path):
-                from playwright.async_api import async_playwright
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch(headless=True)
-                    page = await browser.new_page(viewport={"width": 1400, "height": 1000})
-                    await page.goto(f"file://{_Path(tmp).resolve()}")
-                    await page.wait_for_timeout(5000)
-                    await page.screenshot(path=str(out), full_page=False)
-                    await browser.close()
-
-            asyncio.run(_convert(tmp_html_path, png_path))
-            os.unlink(tmp_html_path)
-            png_paths[dtype] = str(png_path)
-            print(f"  ✓ {mmd_path.name} → {png_path.name}")
+            conversions.append((dtype, mmd_path, _Path(tmp_html_path), png_path))
         except Exception as e:
-            print(f"  ⚠ Failed to convert {dtype}: {e}")
+            print(f"  ⚠ Failed to prepare {dtype}: {e}")
+
+    if not conversions:
+        return {}
+
+    async def _batch_convert(convs):
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page(viewport={"width": 1400, "height": 1000})
+            results = {}
+            for dtype, mmd_path, tmp_html, png_path in convs:
+                try:
+                    await page.goto(f"file://{tmp_html.resolve()}")
+                    await page.wait_for_timeout(5000)
+                    await page.screenshot(path=str(png_path), full_page=False)
+                    results[dtype] = str(png_path)
+                    print(f"  ✓ {mmd_path.name} → {png_path.name}")
+                except Exception as e:
+                    print(f"  ⚠ Failed to convert {dtype}: {e}")
+            await browser.close()
+            return results
+
+    png_paths = asyncio.run(_batch_convert(conversions))
+
+    # Clean up temp HTML files
+    for _, _, tmp_html, _ in conversions:
+        try:
+            os.unlink(str(tmp_html))
+        except OSError:
+            pass
     return png_paths
 
 

@@ -1,4 +1,4 @@
-# Loop Engineering — Agent Instructions
+# Loop Factory — Agent Instructions
 
 ## Skill Loading
 
@@ -20,7 +20,7 @@ skill_view(name='subagent-driven-development')
 ## Project Layout
 
 ```
-loop_engineering/
+loop_factory/
 ├── main.py              # CLI entry (Option B)
 ├── app/                # Web UI (FastAPI, :8011)
 ├── skills/              # Project-local skills (29 SKILL.md)

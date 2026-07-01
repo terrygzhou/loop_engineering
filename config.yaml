@@ -1,6 +1,6 @@
-# loop_engineering configuration
+# loop_factory configuration
 project:
-  name: loop_engineering
+  name: loop_factory
   version: 1.0.0
 
 skills:

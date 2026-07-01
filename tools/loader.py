@@ -87,32 +87,50 @@ def load_skills(skills_dir: str = "") -> List[Dict[str, Any]]:
     return skills
 
 
+# ── Cached registry (singleton, hot-reload on file change) ──
+_registry: Dict[str, Dict[str, Any]] = {}
+_registry_mtime: float = 0.0
+
+
 def build_skill_registry(skills_dir: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """
     Build a name→skill registry for fast lookup.
-    Prioritizes local ./skills directory.
-    Falls back to SKILLS_DIR env var.
-    Does NOT fallback to ~/.hermes/skills unless explicitly configured.
+    Cached — reloads only when skill files have changed.
     """
+    global _registry, _registry_mtime
+
     # Determine skills directory — local first
     if skills_dir is None:
         skills_dir = os.getenv("SKILLS_DIR")
-
     if skills_dir is None:
         if LOCAL_SKILLS_DIR.exists():
             skills_dir = str(LOCAL_SKILLS_DIR)
         else:
             skills_dir = "~/.hermes/skills"
 
-    registry = {}
+    skills_path = Path(skills_dir).expanduser()
+    try:
+        latest = max(
+            (f.stat().st_mtime for f in skills_path.rglob("SKILL.md")),
+            default=0.0,
+        )
+    except Exception:
+        latest = 0.0
+
+    if _registry and latest <= _registry_mtime:
+        return _registry
+
+    new_registry = {}
     skills = load_skills(skills_dir)
     for skill in skills:
-        registry[skill["name"]] = skill
+        new_registry[skill["name"]] = skill
+    _registry = new_registry
+    _registry_mtime = latest
 
     # Save skills index for versioning
-    _save_skills_index(registry)
+    _save_skills_index(_registry)
 
-    return registry
+    return _registry
 
 
 def _save_skills_index(registry: Dict[str, Dict[str, Any]]):

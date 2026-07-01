@@ -1,137 +1,110 @@
 {
   "ai-workflow-data-seeding": {
     "version": "1.0.0",
-    "path": "skills/ai-workflow-data-seeding/SKILL.md",
-    "mtime": 1781963910.5250182
+    "path": "skills/ai-workflow-data-seeding/SKILL.md"
   },
   "headroom-context-compression": {
     "version": "1.0.0",
-    "path": "skills/headroom-context-compression/SKILL.md",
-    "mtime": 1782541567.0875654
+    "path": "skills/headroom-context-compression/SKILL.md"
   },
   "speckit-tasks": {
     "version": "1.0.0",
-    "path": "skills/speckit-tasks/SKILL.md",
-    "mtime": 1781963876.7822838
+    "path": "skills/speckit-tasks/SKILL.md"
   },
   "speckit-specify": {
     "version": "1.0.0",
-    "path": "skills/speckit-specify/SKILL.md",
-    "mtime": 1781963859.8713942
+    "path": "skills/speckit-specify/SKILL.md"
   },
   "docker-compose-deployment": {
     "version": "1.0.0",
-    "path": "skills/docker-compose-deployment/SKILL.md",
-    "mtime": 1781963944.8974912
+    "path": "skills/docker-compose-deployment/SKILL.md"
   },
   "incremental-implementation": {
     "version": "1.0.0",
-    "path": "skills/incremental-implementation/SKILL.md",
-    "mtime": 1782191682.5502963
+    "path": "skills/incremental-implementation/SKILL.md"
   },
   "doubt-driven-development": {
     "version": "1.0.0",
-    "path": "skills/doubt-driven-development/SKILL.md",
-    "mtime": 1782191682.549006
+    "path": "skills/doubt-driven-development/SKILL.md"
   },
   "fastapi-jinja2-feature-build": {
     "version": "1.4.0",
-    "path": "skills/fastapi-jinja2-feature-build/SKILL.md",
-    "mtime": 1781963893.8098855
+    "path": "skills/fastapi-jinja2-feature-build/SKILL.md"
   },
   "requesting-code-review": {
     "version": "2.0.0",
-    "path": "skills/requesting-code-review/SKILL.md",
-    "mtime": 1781963893.8124523
+    "path": "skills/requesting-code-review/SKILL.md"
   },
   "observability-and-instrumentation": {
     "version": "1.0.0",
-    "path": "skills/observability-and-instrumentation/SKILL.md",
-    "mtime": 1782191682.5474112
+    "path": "skills/observability-and-instrumentation/SKILL.md"
   },
   "code-simplification": {
     "version": "1.0.0",
-    "path": "skills/code-simplification/SKILL.md",
-    "mtime": 1781963927.6586008
+    "path": "skills/code-simplification/SKILL.md"
   },
   "context-pruning": {
     "version": "1.0.0",
-    "path": "skills/context-pruning/SKILL.md",
-    "mtime": 1782541567.092434
+    "path": "skills/context-pruning/SKILL.md"
   },
   "writing-plans": {
     "version": "1.1.0",
-    "path": "skills/writing-plans/SKILL.md",
-    "mtime": 1781963876.7809796
+    "path": "skills/writing-plans/SKILL.md"
   },
   "uat-workflow": {
     "version": "1.0.0",
-    "path": "skills/uat-workflow/SKILL.md",
-    "mtime": 1781963927.655479
+    "path": "skills/uat-workflow/SKILL.md"
   },
   "context-size-manager": {
     "version": "1.0.0",
-    "path": "skills/context-size-manager/SKILL.md",
-    "mtime": 1782541567.0891514
+    "path": "skills/context-size-manager/SKILL.md"
   },
   "api-and-interface-design": {
     "version": "1.0.0",
-    "path": "skills/api-and-interface-design/SKILL.md",
-    "mtime": 1782191682.5352435
+    "path": "skills/api-and-interface-design/SKILL.md"
   },
   "security-and-hardening": {
     "version": "1.0.0",
-    "path": "skills/security-and-hardening/SKILL.md",
-    "mtime": 1781963893.8117619
+    "path": "skills/security-and-hardening/SKILL.md"
   },
   "performance-optimization": {
     "version": "1.0.0",
-    "path": "skills/performance-optimization/SKILL.md",
-    "mtime": 1782191682.54612
+    "path": "skills/performance-optimization/SKILL.md"
   },
   "speckit-checklist": {
     "version": "1.0.0",
-    "path": "skills/speckit-checklist/SKILL.md",
-    "mtime": 1781963876.7856083
+    "path": "skills/speckit-checklist/SKILL.md"
   },
   "coding-principles": {
     "version": "1.0.0",
-    "path": "skills/coding-principles/SKILL.md",
-    "mtime": 1782605170.9358659
+    "path": "skills/coding-principles/SKILL.md"
   },
   "git-workflow": {
     "version": "1.0.0",
-    "path": "skills/git-workflow/SKILL.md",
-    "mtime": 1781963944.8982346
+    "path": "skills/git-workflow/SKILL.md"
   },
   "shipping-and-launch": {
     "version": "1.0.0",
-    "path": "skills/shipping-and-launch/SKILL.md",
-    "mtime": 1782191682.5518076
+    "path": "skills/shipping-and-launch/SKILL.md"
   },
   "test-driven-development": {
     "version": "1.1.0",
-    "path": "skills/test-driven-development/SKILL.md",
-    "mtime": 1781963893.810606
+    "path": "skills/test-driven-development/SKILL.md"
   },
   "systematic-debugging": {
     "version": "1.2.0",
-    "path": "skills/systematic-debugging/SKILL.md",
-    "mtime": 1781963927.6569366
+    "path": "skills/systematic-debugging/SKILL.md"
   },
   "architecture-diagram-generator": {
     "version": "1.0.0",
-    "path": "skills/architecture-diagram-generator/SKILL.md",
-    "mtime": 1782542951.1781287
+    "path": "skills/architecture-diagram-generator/SKILL.md"
   },
   "speckit-analyze": {
     "version": "1.0.0",
-    "path": "skills/speckit-analyze/SKILL.md",
-    "mtime": 1781963876.7834547
+    "path": "skills/speckit-analyze/SKILL.md"
   },
   "interview-me": {
     "version": "1.0.0",
-    "path": "skills/interview-me/SKILL.md",
-    "mtime": 1782191616.8315537
+    "path": "skills/interview-me/SKILL.md"
   }
 }

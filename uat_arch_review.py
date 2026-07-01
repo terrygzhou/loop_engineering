@@ -88,7 +88,7 @@ try:
     # Check bridge source for ARCH_REVIEW handling
     import subprocess
     result = subprocess.run(
-        ["docker", "exec", "loop_engineering-loop-1", "grep", "-c", "arch_review",
+        ["docker", "exec", "loop_factory-loop-1", "grep", "-c", "arch_review",
          "/app/frontend/backend/workflow_bridge.py"],
         capture_output=True, text=True
     )
@@ -97,7 +97,7 @@ try:
     
     # Check bridge reads diagram content
     result = subprocess.run(
-        ["docker", "exec", "loop_engineering-loop-1", "grep", "-c", "diagram_paths",
+        ["docker", "exec", "loop_factory-loop-1", "grep", "-c", "diagram_paths",
          "/app/frontend/backend/workflow_bridge.py"],
         capture_output=True, text=True
     )
@@ -106,7 +106,7 @@ try:
     
     # Check resume data passes approval
     result = subprocess.run(
-        ["docker", "exec", "loop_engineering-loop-1", "grep", "-c", "arch_review_approved",
+        ["docker", "exec", "loop_factory-loop-1", "grep", "-c", "arch_review_approved",
          "/app/frontend/backend/workflow_bridge.py"],
         capture_output=True, text=True
     )
@@ -119,7 +119,7 @@ except Exception as e:
 print("\n[6] Edge routing — ARCH_REVIEW")
 try:
     result = subprocess.run(
-        ["docker", "exec", "loop_engineering-loop-1", "grep", "-A", "5", "ARCH_REVIEW",
+        ["docker", "exec", "loop_factory-loop-1", "grep", "-A", "5", "ARCH_REVIEW",
          "/app/graph/edges.py"],
         capture_output=True, text=True
     )
@@ -134,7 +134,7 @@ except Exception as e:
 print("\n[7] Graph compilation")
 try:
     result = subprocess.run(
-        ["docker", "exec", "loop_engineering-loop-1", "grep", "interrupt_after",
+        ["docker", "exec", "loop_factory-loop-1", "grep", "interrupt_after",
          "/app/graph/main.py"],
         capture_output=True, text=True
     )
@@ -146,7 +146,7 @@ except Exception as e:
 print("\n[8] Architecture node — diagram generation")
 try:
     result = subprocess.run(
-        ["docker", "exec", "loop_engineering-loop-1", "grep", "-c", "diagrams_dir",
+        ["docker", "exec", "loop_factory-loop-1", "grep", "-c", "diagrams_dir",
          "/app/graph/nodes/architecture.py"],
         capture_output=True, text=True
     )
